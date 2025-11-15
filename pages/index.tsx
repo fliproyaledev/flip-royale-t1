@@ -127,7 +127,8 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
     setInventory({})
     setHistory([])
     setActive([])
-    setNextRound(Array(5).fill(null))
+    // CRITICAL: Do NOT reset nextRound here - preserve user's saved picks
+    // setNextRound(Array(5).fill(null))
     setPrices({})
     setCurrentPack(null)
     setShowPackResults(false)
@@ -149,7 +150,8 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
         'flipflop-inventory',
         'flipflop-history',
         'flipflop-active',
-        'flipflop-next',
+        // CRITICAL: Do NOT remove flipflop-next - preserve user's saved picks
+        // 'flipflop-next',
         'flipflop_state',
         'flipflop-current-round',
         'flipflop-current-pack',
@@ -209,9 +211,13 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
     let savedNextRound: RoundPick[] | null = null
     try {
       const savedNext = localStorage.getItem('flipflop-next')
+      console.log('🔍 [INIT] Checking localStorage for flipflop-next:', savedNext ? 'EXISTS' : 'NOT FOUND')
+      
       if (savedNext) {
         try {
           const parsed = JSON.parse(savedNext)
+          console.log('🔍 [INIT] Parsed nextRound:', parsed)
+          
           if (Array.isArray(parsed) && parsed.length === 5) {
             // Validate that all items are either null or valid RoundPick objects
             const isValid = parsed.every((item: any) => 
@@ -220,15 +226,21 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
             )
             if (isValid) {
               savedNextRound = parsed
-              console.log('✅ Loaded nextRound from localStorage:', parsed)
+              console.log('✅ [INIT] Valid nextRound loaded from localStorage:', parsed)
+            } else {
+              console.warn('⚠️ [INIT] Invalid nextRound structure:', parsed)
             }
+          } else {
+            console.warn('⚠️ [INIT] nextRound is not an array of length 5:', parsed)
           }
         } catch (e) {
-          console.warn('Failed to parse nextRound:', e)
+          console.error('❌ [INIT] Failed to parse nextRound:', e)
         }
+      } else {
+        console.log('ℹ️ [INIT] No saved nextRound found in localStorage')
       }
     } catch (e) {
-      console.warn('Failed to load nextRound:', e)
+      console.error('❌ [INIT] Failed to load nextRound:', e)
     }
 
     // Check if this is a fresh start (first time or reset)
@@ -286,41 +298,54 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
       }
 
       // Load next round - use the pre-loaded value or load from localStorage
+      // CRITICAL: Always prioritize saved data, never reset unless truly empty
       if (savedNextRound) {
-        console.log('✅ Restoring nextRound from pre-loaded value:', savedNextRound)
+        console.log('✅ [LOAD] Restoring nextRound from pre-loaded value:', savedNextRound)
         setNextRound(savedNextRound)
         setNextRoundLoaded(true)
       } else {
         // Try to load again if pre-load failed
         const savedNext = localStorage.getItem('flipflop-next')
+        console.log('🔍 [LOAD] Second attempt to load nextRound:', savedNext ? 'EXISTS' : 'NOT FOUND')
+        
         if (savedNext) {
           try {
             const parsed = JSON.parse(savedNext)
+            console.log('🔍 [LOAD] Parsed nextRound on second attempt:', parsed)
+            
             if (Array.isArray(parsed) && parsed.length === 5) {
               const isValid = parsed.every((item: any) => 
                 item === null || 
                 (typeof item === 'object' && item !== null && item.tokenId && typeof item.dir === 'string')
               )
               if (isValid) {
-                console.log('✅ Loaded nextRound on second attempt:', parsed)
+                console.log('✅ [LOAD] Loaded nextRound on second attempt:', parsed)
                 setNextRound(parsed)
                 setNextRoundLoaded(true)
               } else {
-                console.warn('Invalid nextRound data, keeping empty')
-                setNextRound(Array(5).fill(null))
+                console.warn('⚠️ [LOAD] Invalid nextRound data structure, but keeping saved data anyway')
+                // Even if invalid, try to preserve it
+                setNextRound(parsed)
                 setNextRoundLoaded(true)
               }
             } else {
-              setNextRound(Array(5).fill(null))
+              console.warn('⚠️ [LOAD] nextRound length mismatch, but keeping saved data anyway')
+              // Even if length mismatch, try to preserve it
+              setNextRound(parsed)
               setNextRoundLoaded(true)
             }
           } catch (e) {
-            console.warn('Failed to parse nextRound on second attempt:', e)
+            console.error('❌ [LOAD] Failed to parse nextRound on second attempt:', e)
+            // On error, check if there's any data at all
+            const rawData = localStorage.getItem('flipflop-next')
+            if (rawData && rawData !== 'null' && rawData !== '[]') {
+              console.warn('⚠️ [LOAD] Parse failed but data exists, keeping empty array')
+            }
             setNextRound(Array(5).fill(null))
             setNextRoundLoaded(true)
           }
         } else {
-          console.log('No saved nextRound found, initializing empty array')
+          console.log('ℹ️ [LOAD] No saved nextRound found, initializing empty array')
           setNextRound(Array(5).fill(null))
           setNextRoundLoaded(true)
         }
@@ -348,6 +373,33 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
   }, [])
 
   useEffect(()=>{ const id=setInterval(()=>setNow(Date.now()), 4000); return ()=>clearInterval(id) },[])
+
+  // CRITICAL: Ensure nextRound is loaded from localStorage on every mount
+  // This is a safety check to prevent data loss
+  useEffect(() => {
+    if (!stateLoaded) return
+    
+    // Double-check: if nextRound is empty but localStorage has data, load it
+    const hasEmptyNextRound = nextRound.every(p => p === null)
+    if (hasEmptyNextRound) {
+      const savedNext = localStorage.getItem('flipflop-next')
+      if (savedNext) {
+        try {
+          const parsed = JSON.parse(savedNext)
+          if (Array.isArray(parsed) && parsed.length === 5) {
+            const hasData = parsed.some(p => p !== null)
+            if (hasData) {
+              console.log('🔄 [SAFETY] Restoring nextRound from localStorage (empty state detected):', parsed)
+              setNextRound(parsed)
+              setNextRoundLoaded(true)
+            }
+          }
+        } catch (e) {
+          console.warn('⚠️ [SAFETY] Failed to restore nextRound:', e)
+        }
+      }
+    }
+  }, [stateLoaded, nextRound])
 
   // Update Global Movers periodically
   useEffect(() => {
@@ -764,10 +816,28 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
 
   function saveNextRoundPicks() {
     try {
+      // Validate nextRound before saving
+      if (!Array.isArray(nextRound) || nextRound.length !== 5) {
+        console.error('Invalid nextRound structure:', nextRound)
+        alert('Invalid picks data. Please try selecting cards again.')
+        return
+      }
+      
       const serialized = JSON.stringify(nextRound)
       localStorage.setItem('flipflop-next', serialized)
+      
+      // Verify it was saved
+      const verify = localStorage.getItem('flipflop-next')
+      if (verify !== serialized) {
+        console.error('Save verification failed! Expected:', serialized, 'Got:', verify)
+        alert('Save verification failed. Please try again.')
+        return
+      }
+      
       setNextRoundLoaded(true)
       console.log('✅ Saved nextRound picks to localStorage:', nextRound)
+      console.log('✅ Verification: localStorage contains', verify ? 'data' : 'nothing')
+      
       // Show success feedback
       alert('Picks saved successfully! Your selections are now saved.')
     } catch (e) {
