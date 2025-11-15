@@ -393,12 +393,22 @@ export async function cancelRoom(roomId: string, userId: string): Promise<{ room
 export async function seedDailyRooms(count = 25, entryCost = 2500): Promise<void> {
   const map = await loadDuels()
   const date = todayIsoDate()
-  const existingToday = Object.values(map).filter(r => r.baseDay === date).length
+  
+  // Remove all rooms from previous days (keep only today's rooms)
+  const todayRooms: Record<string, DuelRoom> = {}
+  for (const [id, room] of Object.entries(map)) {
+    if (room.baseDay === date) {
+      todayRooms[id] = room
+    }
+  }
+  
+  const existingToday = Object.keys(todayRooms).length
   const toCreate = Math.max(0, count - existingToday)
-  if (toCreate === 0) return
+  
   const now = new Date()
   for (let i = 0; i < toCreate; i++) {
-    const id = `duel_${date.replace(/-/g,'')}_${existingToday + i + 1}`
+    const seq = existingToday + i + 1
+    const id = `duel_${date.replace(/-/g,'')}_${seq}`
     const room: DuelRoom = {
       id,
       createdAt: now.toISOString(),
@@ -408,10 +418,30 @@ export async function seedDailyRooms(count = 25, entryCost = 2500): Promise<void
       status: 'open',
       host: { userId: SYSTEM_USER_ID, entryPaid: false, locked: false, picks: [] },
       guest: undefined,
-      seq: existingToday + i + 1
+      seq
     }
-    map[id] = room
+    todayRooms[id] = room
   }
-  await saveDuels(map)
+  
+  // Reassign seq numbers to ensure 1-25 range for all today's rooms
+  const sortedRooms = Object.values(todayRooms).sort((a, b) => {
+    // Sort by seq if available, otherwise by createdAt
+    if (a.seq !== undefined && b.seq !== undefined) {
+      return a.seq - b.seq
+    }
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  })
+  
+  const finalRooms: Record<string, DuelRoom> = {}
+  sortedRooms.forEach((room, index) => {
+    const seq = index + 1
+    finalRooms[room.id] = {
+      ...room,
+      seq
+    }
+  })
+  
+  // Save only today's rooms (removes old days' rooms)
+  await saveDuels(finalRooms)
 }
 
