@@ -394,11 +394,20 @@ export async function seedDailyRooms(count = 25, entryCost = 2500): Promise<void
   const map = await loadDuels()
   const date = todayIsoDate()
   
-  // Remove all rooms from previous days (keep only today's rooms)
+  // Keep all settled/cancelled rooms from previous days (for history)
+  // Remove only open/ready/locked rooms from previous days
+  const keptRooms: Record<string, DuelRoom> = {}
   const todayRooms: Record<string, DuelRoom> = {}
+  
   for (const [id, room] of Object.entries(map)) {
     if (room.baseDay === date) {
       todayRooms[id] = room
+    } else {
+      // Keep settled/cancelled rooms from previous days for history
+      if (room.status === 'settled' || room.status === 'cancelled') {
+        keptRooms[id] = room
+      }
+      // Remove open/ready/locked rooms from previous days
     }
   }
   
@@ -432,16 +441,16 @@ export async function seedDailyRooms(count = 25, entryCost = 2500): Promise<void
     return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
   })
   
-  const finalRooms: Record<string, DuelRoom> = {}
+  const finalTodayRooms: Record<string, DuelRoom> = {}
   sortedRooms.forEach((room, index) => {
     const seq = index + 1
-    finalRooms[room.id] = {
+    finalTodayRooms[room.id] = {
       ...room,
       seq
     }
   })
   
-  // Save only today's rooms (removes old days' rooms)
-  await saveDuels(finalRooms)
+  // Save today's rooms + kept settled/cancelled rooms from previous days
+  await saveDuels({ ...finalTodayRooms, ...keptRooms })
 }
 
