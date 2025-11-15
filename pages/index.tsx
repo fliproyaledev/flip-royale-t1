@@ -966,7 +966,7 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
       {/* Active Round */}
       <div className="panel">
         <div className="row">
-          <h2 style={{fontWeight:900, letterSpacing:1.2, textTransform:'uppercase', color:'#f8fafc', textShadow:'0 3px 10px rgba(0,0,0,0.35)'}}>Active Round - Beta #{currentRound}</h2>
+          <h2 style={{fontWeight:900, letterSpacing:1.2, textTransform:'uppercase', color:'#f8fafc', textShadow:'0 3px 10px rgba(0,0,0,0.35)'}}>Active Round - Beta #1</h2>
           {mounted && boostActive && (
             <span className="badge" style={{
               background: 'rgba(0,207,163,.2)',
@@ -1195,7 +1195,7 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
 
         {/* Next Round */}
       <div className="panel">
-        <h2 style={{fontWeight:900, letterSpacing:1.2, textTransform:'uppercase', color:'#f8fafc', textShadow:'0 3px 10px rgba(0,0,0,0.35)'}}>Next Round - Beta #{currentRound + 1}</h2>
+        <h2 style={{fontWeight:900, letterSpacing:1.2, textTransform:'uppercase', color:'#f8fafc', textShadow:'0 3px 10px rgba(0,0,0,0.35)'}}>Next Round - Beta #1</h2>
         <div className="sep"></div>
         
         <div className="picks" style={{display:'grid', gridTemplateColumns:'repeat(5, minmax(160px, 1fr))', gap:14}}>
@@ -1465,431 +1465,48 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
          <h2>Previous Rounds</h2>
          <div className="sep"></div>
          
-         {/* Beta Round 345 */}
-         <div style={{
-           background: 'rgba(255,255,255,0.05)',
-           borderRadius: 16,
-           padding: 20,
-           marginBottom: 16,
-           border: '1px solid rgba(255,255,255,0.1)'
-         }}>
-           <div style={{
-             display: 'flex',
-             justifyContent: 'space-between',
-             alignItems: 'center',
-             marginBottom: 16
-           }}>
-             <div style={{
-               fontSize: 18,
-               fontWeight: 700,
-               color: 'white'
-             }}>
-               Beta round 345
-             </div>
-             <div style={{
-               fontSize: 14,
-               color: 'rgba(255,255,255,0.7)'
-             }}>
-               Ended Aug 28, 2025
-             </div>
-           </div>
-           
-           {/* Empty hand placeholder */}
-           <div style={{
-             display: 'flex',
-             justifyContent: 'center',
-             gap: 8,
-             marginBottom: 16
-           }}>
-             {Array.from({ length: 5 }, (_, i) => (
-               <div key={i} style={{
-                 width: 40,
-                 height: 56,
-                 background: 'rgba(255,255,255,0.1)',
-                 borderRadius: 8,
-                 border: '2px dashed rgba(255,255,255,0.3)'
-               }} />
-             ))}
-           </div>
+         {recentRounds.length === 0 ? (
            <div style={{
              textAlign: 'center',
+             padding: '40px 20px',
              color: 'rgba(255,255,255,0.6)',
-             fontSize: 14,
-             marginBottom: 16
+             fontSize: 14
            }}>
-             No hand played
+             Complete a round to see your recent performance.
            </div>
-           
-           {/* Leaderboard */}
-           <div style={{
-             background: 'rgba(0,0,0,0.3)',
-             borderRadius: 12,
-             overflow: 'hidden'
-           }}>
-             <div style={{
-               display: 'grid',
-               gridTemplateColumns: '80px 1fr 200px',
-               gap: 16,
-               padding: '12px 16px',
-               background: 'rgba(255,255,255,0.1)',
-               fontSize: 14,
-               fontWeight: 600,
-               color: 'white'
+         ) : (
+           recentRounds.map((round, idx) => (
+             <div key={idx} style={{
+               background: 'rgba(255,255,255,0.05)',
+               borderRadius: 16,
+               padding: 20,
+               marginBottom: 16,
+               border: '1px solid rgba(255,255,255,0.1)'
              }}>
-               <div>Rank</div>
-               <div>Player / Points</div>
-               <div>Hand</div>
-             </div>
-             
-             {/* Top 3 players */}
-             {history.length > 0 ? (
-               history.slice(0, 3).map((round, index) => {
-                 const topPlayer = round.items[0] // Assuming first item is top player
-            return (
-                   <div key={index} style={{
-                     display: 'grid',
-                     gridTemplateColumns: '80px 1fr 200px',
-                     gap: 16,
-                     padding: '12px 16px',
-                     borderBottom: index < 2 ? '1px solid rgba(255,255,255,0.1)' : 'none',
-                     background: index === 0 ? 'rgba(255,215,0,0.1)' : 'transparent'
-                   }}>
-                     <div style={{
-                       fontSize: 16,
-                       fontWeight: 700,
-                       color: index === 0 ? '#ffd700' : 'white'
-                     }}>
-                       #{index + 1}
-                </div>
-                     <div style={{
-                       fontSize: 14,
-                       color: 'white'
-                     }}>
-                       <div style={{ fontWeight: 600, marginBottom: 2 }}>Player {index + 1}</div>
-                       <div style={{ 
-                         color: '#10b981', 
-                         fontSize: 12,
-                         fontWeight: 500 
-                       }}>
-                         +{round.total} pts {round.dayKey}
-                       </div>
-                     </div>
-                     <div style={{
-                       display: 'flex',
-                       gap: 4
-                     }}>
-                      {round.items.slice(0, 5).map((item, cardIndex) => {
-                        const tok = getTokenById(item.tokenId) || TOKENS[0]
-                         return (
-                           <div key={cardIndex} style={{
-                             width: 32,
-                             height: 44,
-                             background: `linear-gradient(135deg, ${getGradientColor(cardIndex)}, ${getGradientColor(cardIndex + 1)})`,
-                             borderRadius: 6,
-                             display: 'flex',
-                             alignItems: 'center',
-                             justifyContent: 'center',
-                             border: '1px solid rgba(255,255,255,0.2)',
-                             boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
-                           }}>
-                             <img
-                               src={tok.logo}
-                               alt={tok.symbol}
-                               style={{
-                                 width: 24,
-                                 height: 24,
-                                 borderRadius: '50%',
-                                 objectFit: 'cover'
-                               }}
-                               onError={handleImageFallback}
-                             />
-                             <div style={{
-                               width: 24,
-                               height: 24,
-                               borderRadius: '50%',
-                               background: 'rgba(255,255,255,0.1)',
-                               display: 'flex',
-                               alignItems: 'center',
-                               justifyContent: 'center',
-                               fontSize: 12,
-                               fontWeight: 900,
-                               color: 'white'
-                             }}></div>
-              </div>
-            )
-          })}
-        
-        </div>
-      </div>
-                 )
-               })
-             ) : (
-               // Demo data when no history
-               [
-                 { rank: 1, name: 'alarms', points: 1355, time: '15:52:10', hand: ['jarvis', 'virtual', 'ethy', 'axr', 'wach'] },
-                 { rank: 2, name: 'birches', points: 1355, time: '15:52:10', hand: ['jarvis', 'virtual', 'ethy', 'axr', 'wach'] },
-                 { rank: 3, name: 'gusher', points: 1355, time: '15:52:11', hand: ['jarvis', 'virtual', 'ethy', 'axr', 'wach'] }
-               ].map((player, index) => (
-               <div key={index} style={{
-                 display: 'grid',
-                 gridTemplateColumns: '80px 1fr 200px',
-                 gap: 16,
-                 padding: '12px 16px',
-                 borderBottom: index < 2 ? '1px solid rgba(255,255,255,0.1)' : 'none',
-                 background: index === 0 ? 'rgba(255,215,0,0.1)' : 'transparent'
+               <div style={{
+                 display: 'flex',
+                 justifyContent: 'space-between',
+                 alignItems: 'center',
+                 marginBottom: 16
                }}>
                  <div style={{
-                   fontSize: 16,
+                   fontSize: 18,
                    fontWeight: 700,
-                   color: index === 0 ? '#ffd700' : 'white'
+                   color: 'white'
                  }}>
-                   #{player.rank}
+                   Beta round {round.roundNumber}
                  </div>
                  <div style={{
                    fontSize: 14,
-                   color: 'white'
+                   color: 'rgba(255,255,255,0.7)'
                  }}>
-                   <div style={{ fontWeight: 600, marginBottom: 2 }}>{player.name}</div>
-                   <div style={{ 
-                     color: '#10b981', 
-                     fontSize: 12,
-                     fontWeight: 500 
-                   }}>
-                     +{player.points} pts {player.time}
-                   </div>
-                 </div>
-                 <div style={{
-                   display: 'flex',
-                   gap: 4
-                 }}>
-                  {player.hand.map((tokenId, cardIndex) => {
-                    const tok = getTokenById(tokenId) || TOKENS[0]
-                     return (
-                       <div key={cardIndex} style={{
-                         width: 32,
-                         height: 44,
-                         background: `linear-gradient(135deg, ${getGradientColor(cardIndex)}, ${getGradientColor(cardIndex + 1)})`,
-                         borderRadius: 6,
-                         display: 'flex',
-                         alignItems: 'center',
-                         justifyContent: 'center',
-                         border: '1px solid rgba(255,255,255,0.2)',
-                         boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
-                       }}>
-                         <img
-                           src={tok.logo}
-                           alt={tok.symbol}
-                           style={{
-                             width: 24,
-                             height: 24,
-                             borderRadius: '50%',
-                             objectFit: 'cover'
-                           }}
-                           onError={handleImageFallback}
-                         />
-                         <div style={{
-                           width: 24,
-                           height: 24,
-                           borderRadius: '50%',
-                           background: 'rgba(255,255,255,0.1)',
-                           display: 'flex',
-                           alignItems: 'center',
-                           justifyContent: 'center',
-                           fontSize: 12,
-                           fontWeight: 900,
-                           color: 'white'
-                         }}></div>
-                       </div>
-                     )
-                   })}
+                   {round.date}
                  </div>
                </div>
-             )))}
-             
-             <div style={{
-               padding: '8px 16px',
-               fontSize: 12,
-               color: 'rgba(255,255,255,0.6)',
-               textAlign: 'center',
-               background: 'rgba(0,0,0,0.2)'
-             }}>
-               of 16,513
+               {/* Round content here */}
              </div>
-           </div>
-         </div>
-         
-         {/* Beta Round 344 */}
-         <div style={{
-           background: 'rgba(255,255,255,0.05)',
-           borderRadius: 16,
-           padding: 20,
-           border: '1px solid rgba(255,255,255,0.1)'
-         }}>
-           <div style={{
-             display: 'flex',
-             justifyContent: 'space-between',
-             alignItems: 'center',
-             marginBottom: 16
-           }}>
-             <div style={{
-               fontSize: 18,
-               fontWeight: 700,
-               color: 'white'
-             }}>
-               Beta round 344
-             </div>
-             <div style={{
-               fontSize: 14,
-               color: 'rgba(255,255,255,0.7)'
-             }}>
-               Ended Aug 27, 2025
-             </div>
-           </div>
-           
-           {/* Empty hand placeholder */}
-           <div style={{
-             display: 'flex',
-             justifyContent: 'center',
-             gap: 8,
-             marginBottom: 16
-           }}>
-             {Array.from({ length: 5 }, (_, i) => (
-               <div key={i} style={{
-                 width: 40,
-                 height: 56,
-                 background: 'rgba(255,255,255,0.1)',
-                 borderRadius: 8,
-                 border: '2px dashed rgba(255,255,255,0.3)'
-               }} />
-             ))}
-           </div>
-           <div style={{
-             textAlign: 'center',
-             color: 'rgba(255,255,255,0.6)',
-             fontSize: 14,
-             marginBottom: 16
-           }}>
-             No hand played
-           </div>
-           
-           {/* Leaderboard */}
-           <div style={{
-             background: 'rgba(0,0,0,0.3)',
-             borderRadius: 12,
-             overflow: 'hidden'
-           }}>
-             <div style={{
-               display: 'grid',
-               gridTemplateColumns: '80px 1fr 200px',
-               gap: 16,
-               padding: '12px 16px',
-               background: 'rgba(255,255,255,0.1)',
-               fontSize: 14,
-               fontWeight: 600,
-               color: 'white'
-             }}>
-               <div>Rank</div>
-               <div>Player / Points</div>
-               <div>Hand</div>
-             </div>
-             
-             {/* Top 3 players */}
-             {[
-               { rank: 1, name: 'cbvfdzk33', points: 1280, time: '14:23:45', hand: ['facy', 'lily', 'robot', 'virgen', 'bios'] },
-               { rank: 2, name: 'crypto_king', points: 1245, time: '14:23:46', hand: ['facy', 'lily', 'robot', 'virgen', 'bios'] },
-               { rank: 3, name: 'token_hunter', points: 1210, time: '14:23:47', hand: ['facy', 'lily', 'robot', 'virgen', 'bios'] }
-             ].map((player, index) => (
-               <div key={index} style={{
-                 display: 'grid',
-                 gridTemplateColumns: '80px 1fr 200px',
-                 gap: 16,
-                 padding: '12px 16px',
-                 borderBottom: index < 2 ? '1px solid rgba(255,255,255,0.1)' : 'none',
-                 background: index === 0 ? 'rgba(255,215,0,0.1)' : 'transparent'
-               }}>
-                 <div style={{
-                   fontSize: 16,
-                   fontWeight: 700,
-                   color: index === 0 ? '#ffd700' : 'white'
-                 }}>
-                   #{player.rank}
-                 </div>
-                 <div style={{
-                   fontSize: 14,
-                   color: 'white'
-                 }}>
-                   <div style={{ fontWeight: 600, marginBottom: 2 }}>{player.name}</div>
-                   <div style={{ 
-                     color: '#10b981', 
-                     fontSize: 12,
-                     fontWeight: 500 
-                   }}>
-                     +{player.points} pts {player.time}
-                   </div>
-                 </div>
-                 <div style={{
-                   display: 'flex',
-                   gap: 4
-                 }}>
-                  {player.hand.map((tokenId, cardIndex) => {
-                    const tok = getTokenById(tokenId) || TOKENS[0]
-                return (
-                       <div key={cardIndex} style={{
-                         width: 32,
-                         height: 44,
-                         background: `linear-gradient(135deg, ${getGradientColor(cardIndex + 5)}, ${getGradientColor(cardIndex + 6)})`,
-                         borderRadius: 6,
-                         display: 'flex',
-                         alignItems: 'center',
-                         justifyContent: 'center',
-                         border: '1px solid rgba(255,255,255,0.2)',
-                         boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
-                       }}>
-                         <img
-                           src={tok.logo}
-                           alt={tok.symbol}
-                           style={{
-                             width: 24,
-                             height: 24,
-                             borderRadius: '50%',
-                             objectFit: 'cover'
-                           }}
-                           onError={(e) => {
-                             const target = e.target as HTMLImageElement;
-                             target.style.display = 'none';
-                             target.nextElementSibling!.textContent = tok.symbol.charAt(0);
-                           }}
-                         />
-                         <div style={{
-                           width: 24,
-                           height: 24,
-                           borderRadius: '50%',
-                           background: 'rgba(255,255,255,0.1)',
-                           display: 'flex',
-                           alignItems: 'center',
-                           justifyContent: 'center',
-                           fontSize: 12,
-                           fontWeight: 900,
-                           color: 'white'
-                         }}></div>
-                  </div>
-                )
-              })}
-            </div>
-               </div>
-             ))}
-             
-             <div style={{
-               padding: '8px 16px',
-               fontSize: 12,
-               color: 'rgba(255,255,255,0.6)',
-               textAlign: 'center',
-               background: 'rgba(0,0,0,0.2)'
-             }}>
-               of 15,847
-             </div>
-           </div>
-         </div>
+           ))
+         )}
        </div>
 
        </div>
@@ -1906,7 +1523,7 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
            boxShadow: '0 10px 30px rgba(0,0,0,0.25)'
          }}>
            <div style={{fontSize: 13, fontWeight: 900, letterSpacing: 1, textTransform: 'uppercase', color: '#e0f2fe'}}>
-             Global Movers · Beta #{Math.max(1, currentRound - 1)}
+             Global Movers · Beta #1
            </div>
            
            <div>
