@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/router'
 import { TOKENS, getTokenById } from '../lib/tokens'
+import ThemeToggle from '../components/ThemeToggle'
 
 type DuelRoom = {
   id: string
@@ -337,8 +338,8 @@ export default function Arena(){
           <a className="tab" href="/history">HISTORY</a>
           {user && <a className="tab" href="/profile">PROFILE</a>}
         </nav>
-        <div style={{display: 'flex', alignItems: 'center', gap: 16}}>
-          <div className="muted">1v1 Daily Rooms</div>
+        <div style={{display: 'flex', alignItems: 'center', gap: 12, marginLeft: 'auto'}}>
+          <ThemeToggle />
           <a 
             href="https://x.com/fliproyale" 
             target="_blank" 
@@ -347,23 +348,27 @@ export default function Arena(){
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              width: 36,
-              height: 36,
-              borderRadius: '50%',
-              background: 'rgba(255,255,255,0.08)',
-              border: '1px solid rgba(255,255,255,0.15)',
+              width: 48,
+              height: 48,
+              borderRadius: 12,
+              background: 'rgba(255,255,255,0.1)',
+              border: '1px solid rgba(255,255,255,0.2)',
               color: 'white',
               textDecoration: 'none',
               transition: 'all 0.3s',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              backdropFilter: 'blur(10px)',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.background = 'rgba(255,255,255,0.15)'
-              e.currentTarget.style.transform = 'scale(1.1)'
+              e.currentTarget.style.transform = 'scale(1.05)'
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)'
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.08)'
+              e.currentTarget.style.background = 'rgba(255,255,255,0.1)'
               e.currentTarget.style.transform = 'scale(1)'
+              e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)'
             }}
             title="Follow us on X"
           >
@@ -371,47 +376,73 @@ export default function Arena(){
               <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
             </svg>
           </a>
+          
           {user && (
-            <div style={{display: 'flex', alignItems: 'center', gap: 12, flexDirection: 'column'}}>
-              <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
-                <div style={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: '50%',
-                  overflow: 'hidden',
-                  border: '2px solid rgba(255,255,255,0.25)',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
-                  background: 'rgba(255,255,255,0.1)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <img
-                    src={user.avatar || DEFAULT_AVATAR}
-                    alt={user.username}
-                    style={{width: '100%', height: '100%', objectFit: 'cover'}}
-                    onError={(e) => {
-                      (e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR
-                    }}
-                  />
-                </div>
-                
-                <div style={{
-                  background: 'rgba(0,207,163,0.15)',
-                  border: '1px solid rgba(0,207,163,0.25)',
-                  borderRadius: 10,
-                  padding: '6px 12px',
-                  fontSize: 15,
-                  fontWeight: 700,
-                  color: '#86efac',
-                  textShadow: '0 1px 2px rgba(0,0,0,0.3)',
-                  minWidth: 100,
-                  textAlign: 'center'
-                }}>
-                  {points.toLocaleString()} pts
-                </div>
+            <>
+              <div style={{
+                width: 44,
+                height: 44,
+                borderRadius: '50%',
+                overflow: 'hidden',
+                border: '2px solid rgba(255,255,255,0.25)',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+                background: 'rgba(255,255,255,0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <img
+                  src={user.avatar || DEFAULT_AVATAR}
+                  alt={user.username}
+                  style={{width: '100%', height: '100%', objectFit: 'cover'}}
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR
+                  }}
+                />
               </div>
-            </div>
+              
+              <div style={{
+                background: 'rgba(0,207,163,0.15)',
+                border: '1px solid rgba(0,207,163,0.25)',
+                borderRadius: 10,
+                padding: '8px 14px',
+                fontSize: 15,
+                fontWeight: 700,
+                color: '#86efac',
+                textShadow: '0 1px 2px rgba(0,0,0,0.3)',
+                whiteSpace: 'nowrap'
+              }}>
+                {points.toLocaleString()} pts
+              </div>
+              
+              <button
+                onClick={() => {
+                  localStorage.removeItem('flipflop-user')
+                  window.location.href = '/auth'
+                }}
+                style={{
+                  background: 'rgba(239,68,68,0.2)',
+                  border: '1px solid rgba(239,68,68,0.3)',
+                  color: '#fca5a5',
+                  padding: '8px 16px',
+                  borderRadius: 10,
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.3s',
+                  whiteSpace: 'nowrap'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(239,68,68,0.3)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(239,68,68,0.2)'
+                }}
+              >
+                Logout
+              </button>
+            </>
           )}
         </div>
       </header>
