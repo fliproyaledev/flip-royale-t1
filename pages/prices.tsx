@@ -37,7 +37,6 @@ export default function PricesPage() {
   const [lastUpdated, setLastUpdated] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [user, setUser] = useState<any>(null)
-  const [isAdmin, setIsAdmin] = useState<boolean>(false)
   const [sortBy, setSortBy] = useState<SortOption>('changePct')
 
   useEffect(() => {
@@ -49,10 +48,6 @@ export default function PricesPage() {
         setUser(null)
       }
     }
-    // Simple admin gate: local flag flipflop-admin === '1'
-    try {
-      setIsAdmin(localStorage.getItem('flipflop-admin') === '1')
-    } catch {}
   }, [])
 
   const loadPrices = async (showSpinner = false) => {
@@ -156,39 +151,6 @@ export default function PricesPage() {
   const updatedLabel = lastUpdated
     ? new Date(lastUpdated).toLocaleTimeString()
     : '--'
-
-  if (!isAdmin) {
-    return (
-      <div className="app">
-        <header className="topbar">
-          <div className="brand">
-            <img src="/logo.png" alt="FLIP ROYALE" className="logo" onError={(e) => {
-              const target = e.currentTarget as HTMLImageElement
-              target.src = '/logo.svg'
-              target.onerror = () => {
-                target.style.display = 'none'
-                const parent = target.parentElement
-                if (parent) parent.innerHTML = '<span class="dot"></span> FLIP ROYALE'
-              }
-            }} />
-          </div>
-          <nav className="tabs">
-            <a className="tab" href="/">PLAY</a>
-            <a className="tab" href="/arena">ARENA</a>
-            <a className="tab" href="/guide">GUIDE</a>
-            <a className="tab" href="/inventory">INVENTORY</a>
-            <a className="tab" href="/leaderboard">LEADERBOARD</a>
-            <a className="tab" href="/history">HISTORY</a>
-            {user && <a className="tab" href="/profile">PROFILE</a>}
-          </nav>
-          <div className="muted">Admin-only section</div>
-        </header>
-        <div className="panel" style={{padding:24}}>
-          <div style={{color:'var(--muted-inv)'}}>Prices page is restricted. If you are an admin, set localStorage key "flipflop-admin" to "1".</div>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="app">
