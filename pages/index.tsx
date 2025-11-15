@@ -360,7 +360,10 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
     try {
       const r = await fetch('/api/users/purchase-pack', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         body: JSON.stringify({ userId: user.id, cost, packType: 'mystery' })
       })
       
