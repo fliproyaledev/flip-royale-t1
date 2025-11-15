@@ -154,7 +154,8 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
         'flipflop-current-pack',
         'flipflop-starter-available',
         'flipflop-points',
-        'flipflop-global-highlights'
+        'flipflop-global-highlights',
+        'flipflop-has-started'
       ].forEach(key => localStorage.removeItem(key))
     } catch {}
   }
@@ -194,26 +195,87 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
     const savedPts = localStorage.getItem('flipflop-points')
     if (savedPts) setPoints(parseInt(savedPts))
     
-    // Reset to Beta Round 1 - Fresh Start
-    setCurrentRound(1)
-    try {
-      localStorage.setItem('flipflop-current-round', '1')
-      // Clear previous rounds history
-      localStorage.removeItem('flipflop-history')
-      localStorage.removeItem('flipflop-active')
-      localStorage.removeItem('flipflop-next')
-      localStorage.removeItem('flipflop_state')
-      localStorage.removeItem('flipflop-global-highlights')
-      localStorage.removeItem('flipflop-last-settled-day')
-    } catch {}
+    // Check if this is a fresh start (first time or reset)
+    const isFreshStart = !localStorage.getItem('flipflop-has-started')
+    if (isFreshStart) {
+      // Mark as started
+      try {
+        localStorage.setItem('flipflop-has-started', '1')
+        // Reset to Beta Round 1 - Fresh Start
+        setCurrentRound(1)
+        localStorage.setItem('flipflop-current-round', '1')
+        // Clear previous rounds history for fresh start
+        localStorage.removeItem('flipflop-history')
+        localStorage.removeItem('flipflop-active')
+        localStorage.removeItem('flipflop-next')
+        localStorage.removeItem('flipflop_state')
+        localStorage.removeItem('flipflop-global-highlights')
+        localStorage.removeItem('flipflop-last-settled-day')
+        setActive([])
+        setNextRound(Array(5).fill(null))
+      } catch {}
+    } else {
+      // Normal load - restore from localStorage
+      const savedRound = localStorage.getItem('flipflop-current-round')
+      if (savedRound) {
+        setCurrentRound(parseInt(savedRound) || 1)
+      } else {
+        setCurrentRound(1)
+      }
+    }
 
     // Load saved active and nextRound to prevent round reset on navigation
     try {
-      // Reset active and next round for fresh start
-      setActive([])
-      setNextRound(Array(5).fill(null))
+      // Load active round from localStorage (if not fresh start)
+      if (!isFreshStart) {
+        const savedActive = localStorage.getItem('flipflop-active')
+        if (savedActive) {
+          try {
+            const parsed = JSON.parse(savedActive)
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setActive(parsed)
+            } else {
+              setActive([])
+            }
+          } catch {
+            setActive([])
+          }
+        } else {
+          setActive([])
+        }
+      } else {
+        setActive([])
+      }
+
+      // Load next round from localStorage (if not fresh start)
+      if (!isFreshStart) {
+        const savedNext = localStorage.getItem('flipflop-next')
+        if (savedNext) {
+          try {
+            const parsed = JSON.parse(savedNext)
+            if (Array.isArray(parsed) && parsed.length === 5) {
+              setNextRound(parsed)
+            } else {
+              setNextRound(Array(5).fill(null))
+            }
+          } catch {
+            setNextRound(Array(5).fill(null))
+          }
+        } else {
+          setNextRound(Array(5).fill(null))
+        }
+      } else {
+        setNextRound(Array(5).fill(null))
+      }
       setStateLoaded(true)
-    } catch {}
+    } catch {
+      if (!isFreshStart) {
+        // Only set defaults if not fresh start (in case of error)
+        setActive([])
+        setNextRound(Array(5).fill(null))
+      }
+      setStateLoaded(true)
+    }
   }, [])
 
   useEffect(()=>{ const id=setInterval(()=>setNow(Date.now()), 4000); return ()=>clearInterval(id) },[])
