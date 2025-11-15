@@ -410,25 +410,47 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
   useEffect(() => {
     if (!stateLoaded) return
     
-    // Double-check: if nextRound is empty but localStorage has data, load it
-    const hasEmptyNextRound = nextRound.every(p => p === null)
-    if (hasEmptyNextRound && !nextRoundSaved) {
-      const savedNext = localStorage.getItem('flipflop-next')
-      if (savedNext) {
-        try {
-          const parsed = JSON.parse(savedNext)
-          if (Array.isArray(parsed) && parsed.length === 5) {
-            const hasData = parsed.some(p => p !== null)
-            if (hasData) {
-              console.log('🔄 [SAFETY] Restoring nextRound from localStorage (empty state detected):', parsed)
+    // Always check localStorage on mount, regardless of current state
+    const savedNext = localStorage.getItem('flipflop-next')
+    console.log('🔄 [SAFETY] Checking localStorage on mount:', savedNext ? 'EXISTS' : 'NOT FOUND')
+    
+    if (savedNext) {
+      try {
+        const parsed = JSON.parse(savedNext)
+        console.log('🔄 [SAFETY] Parsed data from localStorage:', parsed)
+        
+        if (Array.isArray(parsed) && parsed.length === 5) {
+          const hasData = parsed.some(p => p !== null)
+          const currentHasData = nextRound.some(p => p !== null)
+          
+          // If localStorage has data but current state doesn't, restore it
+          if (hasData && !currentHasData) {
+            console.log('🔄 [SAFETY] Restoring nextRound from localStorage (empty state detected):', parsed)
+            setNextRound(parsed)
+            setNextRoundLoaded(true)
+            // Check if all picks are filled to mark as saved
+            const hasAllPicks = parsed.every((p: any) => p !== null)
+            if (hasAllPicks) {
+              setNextRoundSaved(true)
+              console.log('✅ [SAFETY] Marked nextRound as saved (all 5 picks filled)')
+            }
+          } else if (hasData && currentHasData) {
+            // Both have data, but verify they match
+            const currentSerialized = JSON.stringify(nextRound)
+            const savedSerialized = JSON.stringify(parsed)
+            if (currentSerialized !== savedSerialized) {
+              console.log('🔄 [SAFETY] State mismatch detected, restoring from localStorage')
               setNextRound(parsed)
               setNextRoundLoaded(true)
-              setNextRoundSaved(true)
+              const hasAllPicks = parsed.every((p: any) => p !== null)
+              if (hasAllPicks) {
+                setNextRoundSaved(true)
+              }
             }
           }
-        } catch (e) {
-          console.warn('⚠️ [SAFETY] Failed to restore nextRound:', e)
         }
+      } catch (e) {
+        console.error('❌ [SAFETY] Failed to restore nextRound:', e)
       }
     }
   }, [stateLoaded])
@@ -856,40 +878,66 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
 
   function saveNextRoundPicks() {
     try {
-      // Validate nextRound before saving
-      if (!Array.isArray(nextRound) || nextRound.length !== 5) {
-        console.error('Invalid nextRound structure:', nextRound)
-        alert('Invalid picks data. Please try selecting cards again.')
-        return
-      }
-      
-      // Check if all 5 slots are filled
-      const filledCount = nextRound.filter(p => p !== null).length
-      if (filledCount === 0) {
-        alert('Please select at least one card before saving.')
-        return
-      }
-      
-      const serialized = JSON.stringify(nextRound)
-      localStorage.setItem('flipflop-next', serialized)
-      
-      // Verify it was saved
-      const verify = localStorage.getItem('flipflop-next')
-      if (verify !== serialized) {
-        console.error('Save verification failed! Expected:', serialized, 'Got:', verify)
-        alert('Save verification failed. Please try again.')
-        return
-      }
-      
-      setNextRoundLoaded(true)
-      setNextRoundSaved(true) // Mark as saved
-      console.log('✅ [SAVE] Saved nextRound picks to localStorage:', nextRound)
-      console.log('✅ [SAVE] Verification: localStorage contains', verify ? 'data' : 'nothing')
-      
-      // Show success feedback
-      alert(`Picks saved successfully! ${filledCount}/5 cards selected.`)
+      // CRITICAL: Use a function to get the latest nextRound state
+      // This ensures we're saving the most current data
+      setNextRound(currentNextRound => {
+        // Validate nextRound before saving
+        if (!Array.isArray(currentNextRound) || currentNextRound.length !== 5) {
+          console.error('❌ [SAVE] Invalid nextRound structure:', currentNextRound)
+          alert('Invalid picks data. Please try selecting cards again.')
+          return currentNextRound
+        }
+        
+        // Check if all 5 slots are filled
+        const filledCount = currentNextRound.filter(p => p !== null).length
+        if (filledCount === 0) {
+          alert('Please select at least one card before saving.')
+          return currentNextRound
+        }
+        
+        // Deep clone to ensure we're saving the actual data
+        const dataToSave = currentNextRound.map(p => {
+          if (p === null) return null
+          return {
+            tokenId: p.tokenId,
+            dir: p.dir,
+            duplicateIndex: p.duplicateIndex,
+            locked: p.locked || false
+          }
+        })
+        
+        const serialized = JSON.stringify(dataToSave)
+        console.log('💾 [SAVE] Serializing nextRound:', dataToSave)
+        console.log('💾 [SAVE] Serialized string:', serialized)
+        
+        localStorage.setItem('flipflop-next', serialized)
+        
+        // Verify it was saved
+        const verify = localStorage.getItem('flipflop-next')
+        console.log('🔍 [SAVE] Verification read from localStorage:', verify)
+        
+        if (verify !== serialized) {
+          console.error('❌ [SAVE] Save verification failed!')
+          console.error('Expected:', serialized)
+          console.error('Got:', verify)
+          alert('Save verification failed. Please try again.')
+          return currentNextRound
+        }
+        
+        setNextRoundLoaded(true)
+        setNextRoundSaved(true) // Mark as saved
+        
+        console.log('✅ [SAVE] Successfully saved nextRound to localStorage')
+        console.log('✅ [SAVE] Saved data:', JSON.parse(serialized))
+        console.log('✅ [SAVE] Verification: localStorage contains data')
+        
+        // Show success feedback
+        alert(`Picks saved successfully! ${filledCount}/5 cards selected.`)
+        
+        return currentNextRound
+      })
     } catch (e) {
-      console.error('Failed to save nextRound picks:', e)
+      console.error('❌ [SAVE] Failed to save nextRound picks:', e)
       alert('Failed to save picks. Please try again.')
     }
   }
