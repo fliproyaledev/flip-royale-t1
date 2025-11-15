@@ -7,10 +7,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!userId) return res.status(400).json({ ok: false, error: 'userId required' })
     const users = await loadUsers()
     const u = getOrCreateUser(users, userId)
-    // Bootstrap starter points for new users so points are usable across modes
-    if ((u.totalPoints === 0 && u.bankPoints === 0) && (!u.logs || u.logs.length === 0)) {
-      u.totalPoints = 50000
-      u.bankPoints = 50000
+    // Bootstrap starter gift points for new users (not counted in leaderboard)
+    if ((u.totalPoints === 0 && u.bankPoints === 0 && (u.giftPoints === undefined || u.giftPoints === 0)) && (!u.logs || u.logs.length === 0)) {
+      u.giftPoints = 50000
+      u.bankPoints = 50000  // Gift points are spendable
+      u.totalPoints = 0     // Not counted in leaderboard
       u.updatedAt = new Date().toISOString()
     }
     await saveUsers(users)
