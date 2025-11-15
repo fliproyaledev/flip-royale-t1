@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
+import ThemeToggle from '../components/ThemeToggle'
 
 const DEFAULT_AVATAR = '/avatars/default-avatar.png'
 
@@ -111,7 +112,8 @@ export default function Profile(){
           <a className="tab" href="/history">HISTORY</a>
           <a className="tab active" href="/profile">PROFILE</a>
         </nav>
-        <div style={{display: 'flex', alignItems: 'center', gap: 16}}>
+        <div style={{display: 'flex', alignItems: 'center', gap: 12, marginLeft: 'auto'}}>
+          <ThemeToggle />
           <a 
             href="https://x.com/fliproyale" 
             target="_blank" 
@@ -120,23 +122,27 @@ export default function Profile(){
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              width: 36,
-              height: 36,
-              borderRadius: '50%',
-              background: 'rgba(255,255,255,0.08)',
-              border: '1px solid rgba(255,255,255,0.15)',
+              width: 48,
+              height: 48,
+              borderRadius: 12,
+              background: 'rgba(255,255,255,0.1)',
+              border: '1px solid rgba(255,255,255,0.2)',
               color: 'white',
               textDecoration: 'none',
               transition: 'all 0.3s',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              backdropFilter: 'blur(10px)',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.background = 'rgba(255,255,255,0.15)'
-              e.currentTarget.style.transform = 'scale(1.1)'
+              e.currentTarget.style.transform = 'scale(1.05)'
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)'
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.08)'
+              e.currentTarget.style.background = 'rgba(255,255,255,0.1)'
               e.currentTarget.style.transform = 'scale(1)'
+              e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)'
             }}
             title="Follow us on X"
           >
@@ -144,54 +150,56 @@ export default function Profile(){
               <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
             </svg>
           </a>
-          <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
-            <div style={{
-              width: 44,
-              height: 44,
-              borderRadius: '50%',
-              overflow: 'hidden',
-              border: '2px solid rgba(255,255,255,0.25)',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
-              background: 'rgba(255,255,255,0.1)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <img
-                src={user.avatar || DEFAULT_AVATAR}
-                alt={user.username}
-                style={{width: '100%', height: '100%', objectFit: 'cover'}}
-                onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR
-                }}
-              />
-            </div>
-            <button
-              onClick={() => {
-                localStorage.removeItem('flipflop-user')
-                window.location.href = '/auth'
+          
+          <div style={{
+            width: 44,
+            height: 44,
+            borderRadius: '50%',
+            overflow: 'hidden',
+            border: '2px solid rgba(255,255,255,0.25)',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+            background: 'rgba(255,255,255,0.1)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0
+          }}>
+            <img
+              src={user.avatar || DEFAULT_AVATAR}
+              alt={user.username}
+              style={{width: '100%', height: '100%', objectFit: 'cover'}}
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR
               }}
-              style={{
-                background: 'rgba(239,68,68,0.2)',
-                border: '1px solid rgba(239,68,68,0.3)',
-                color: '#fca5a5',
-                padding: '8px 16px',
-                borderRadius: 10,
-                fontSize: 14,
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.3s'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(239,68,68,0.3)'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'rgba(239,68,68,0.2)'
-              }}
-            >
-              Logout
-            </button>
+            />
           </div>
+          
+          <button
+            onClick={() => {
+              localStorage.removeItem('flipflop-user')
+              window.location.href = '/auth'
+            }}
+            style={{
+              background: 'rgba(239,68,68,0.2)',
+              border: '1px solid rgba(239,68,68,0.3)',
+              color: '#fca5a5',
+              padding: '8px 16px',
+              borderRadius: 10,
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.3s',
+              whiteSpace: 'nowrap'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(239,68,68,0.3)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(239,68,68,0.2)'
+            }}
+          >
+            Logout
+          </button>
         </div>
       </header>
 
