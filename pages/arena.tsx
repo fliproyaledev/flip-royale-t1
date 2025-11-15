@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/router'
 import { TOKENS, getTokenById } from '../lib/tokens'
 
@@ -56,8 +56,14 @@ export default function Arena(){
     try{
       const r = await fetch('/api/duel/get')
       const j: ApiList = await r.json()
-      if (j?.ok && Array.isArray(j.rooms)) setRooms(j.rooms)
-    }catch(e:any){ setError(e?.message||'Load failed') }
+      if (j?.ok && Array.isArray(j.rooms)) {
+        setRooms(j.rooms)
+        setError(null) // Clear any previous errors
+      }
+    }catch(e:any){ 
+      setError(e?.message||'Load failed')
+      setRooms([]) // Set empty array on error
+    }
     finally{ setLoading(false) }
   }
 
@@ -67,6 +73,7 @@ export default function Arena(){
       const j: ApiRoom = await r.json()
       if (j?.ok) {
         setRoom(j.room)
+        setError(null) // Clear any previous errors
         // Sync selected from server if empty or lengths differ
         const side = mySide(j.room as any)
         if (side && Array.isArray(side.picks) && side.picks.length > 0) {
@@ -76,56 +83,85 @@ export default function Arena(){
           })
         }
       }
-    }catch(e:any){ setError(e?.message||'Load room failed') }
+    }catch(e:any){ 
+      setError(e?.message||'Load room failed')
+      setRoom(null) // Clear room on error
+    }
   }
 
-  async function loadUserPoints(u:any){
-    if(!u) return
+  const loadUserPointsRef = useRef(false) // Prevent concurrent calls
+  
+  const loadUserPoints = useCallback(async (u:any) => {
+    if(!u || loadUserPointsRef.current) return
+    loadUserPointsRef.current = true
     try{
       const r = await fetch(`/api/users/me?userId=${encodeURIComponent(u.id)}`)
       const j = await r.json()
       if (j?.ok) {
-        setPoints(j.user?.bankPoints||0)
-        try {
-          localStorage.setItem('flipflop-points', String(j.user?.bankPoints||0))
-        } catch {}
+        const newPoints = j.user?.bankPoints||0
+        setPoints(prev => {
+          // Only update if points actually changed
+          if (prev !== newPoints) {
+            try {
+              localStorage.setItem('flipflop-points', String(newPoints))
+            } catch {}
+            return newPoints
+          }
+          return prev
+        })
       }
     }catch{}
-  }
+    finally {
+      loadUserPointsRef.current = false
+    }
+  }, [])
 
   useEffect(()=>{
+    let mounted = true
     try{
       const s = localStorage.getItem('flipflop-user')
       if (s){ 
         const u = JSON.parse(s)
-        setUser(u)
-        loadUserPoints(u)
+        if (mounted) {
+          setUser(u)
+          loadUserPoints(u)
+        }
       }
       const inv = localStorage.getItem('flipflop-inventory')
-      if (inv) setInventory(JSON.parse(inv))
+      if (inv && mounted) setInventory(JSON.parse(inv))
       // Also try to load from localStorage as fallback
       const savedPts = localStorage.getItem('flipflop-points')
-      if (savedPts) setPoints(parseInt(savedPts) || 0)
+      if (savedPts && mounted) setPoints(parseInt(savedPts) || 0)
     }catch{}
+    
+    let roomInterval: NodeJS.Timeout | null = null
     if (roomId){
       loadRoom(roomId)
-      const iv = setInterval(()=>loadRoom(roomId), 8000)
-      return ()=>clearInterval(iv)
+      roomInterval = setInterval(()=>{
+        if (mounted) loadRoom(roomId)
+      }, 8000)
     } else {
       loadRooms()
-      const ir = setInterval(loadRooms, 10000)
-      return ()=>clearInterval(ir)
+      roomInterval = setInterval(()=>{
+        if (mounted) loadRooms()
+      }, 10000)
+    }
+    
+    return ()=>{
+      mounted = false
+      if (roomInterval) clearInterval(roomInterval)
     }
   },[roomId])
   
-  // Refresh points periodically
+  // Refresh points periodically - use user.id instead of user object to avoid re-renders
   useEffect(() => {
-    if (!user) return
+    if (!user?.id) return
+    const userId = user.id // Capture user.id to avoid dependency on user object
     const interval = setInterval(() => {
-      loadUserPoints(user)
+      loadUserPoints({ id: userId } as any)
     }, 30000) // Refresh every 30 seconds
     return () => clearInterval(interval)
-  }, [user])
+  }, [user?.id]) // Only depend on user.id, not the whole user object
 
   async function createRoom(){
     if (!user) { alert('Please register/login on PLAY page first.'); return }
