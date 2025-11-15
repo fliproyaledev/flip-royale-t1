@@ -233,55 +233,48 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
     }
 
     // Load saved active and nextRound to prevent round reset on navigation
+    // Always try to load from localStorage, regardless of isFreshStart
+    // (isFreshStart only clears data, doesn't prevent loading)
     try {
-      // Load active round from localStorage (if not fresh start)
-      if (!isFreshStart) {
-        const savedActive = localStorage.getItem('flipflop-active')
-        if (savedActive) {
-          try {
-            const parsed = JSON.parse(savedActive)
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              setActive(parsed)
-            } else {
-              setActive([])
-            }
-          } catch {
-            setActive([])
+      // Load active round from localStorage
+      const savedActive = localStorage.getItem('flipflop-active')
+      if (savedActive && !isFreshStart) {
+        try {
+          const parsed = JSON.parse(savedActive)
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setActive(parsed)
           }
-        } else {
-          setActive([])
+        } catch {
+          // Keep default empty array
         }
-      } else {
-        setActive([])
       }
 
-      // Load next round from localStorage (if not fresh start)
-      if (!isFreshStart) {
-        const savedNext = localStorage.getItem('flipflop-next')
-        if (savedNext) {
-          try {
-            const parsed = JSON.parse(savedNext)
-            if (Array.isArray(parsed) && parsed.length === 5) {
+      // Load next round from localStorage - ALWAYS try to load
+      const savedNext = localStorage.getItem('flipflop-next')
+      if (savedNext) {
+        try {
+          const parsed = JSON.parse(savedNext)
+          if (Array.isArray(parsed) && parsed.length === 5) {
+            // Validate that all items are either null or valid RoundPick objects
+            const isValid = parsed.every((item: any) => 
+              item === null || 
+              (typeof item === 'object' && item.tokenId && typeof item.dir === 'string')
+            )
+            if (isValid) {
               setNextRound(parsed)
             } else {
+              // Invalid data, reset to empty
               setNextRound(Array(5).fill(null))
             }
-          } catch {
-            setNextRound(Array(5).fill(null))
           }
-        } else {
-          setNextRound(Array(5).fill(null))
+        } catch (e) {
+          console.warn('Failed to parse nextRound from localStorage:', e)
+          // Keep default empty array on parse error
         }
-      } else {
-        setNextRound(Array(5).fill(null))
       }
       setStateLoaded(true)
-    } catch {
-      if (!isFreshStart) {
-        // Only set defaults if not fresh start (in case of error)
-        setActive([])
-        setNextRound(Array(5).fill(null))
-      }
+    } catch (e) {
+      console.warn('Failed to load state from localStorage:', e)
       setStateLoaded(true)
     }
   }, [])
