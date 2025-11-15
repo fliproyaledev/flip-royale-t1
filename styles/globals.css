@@ -439,6 +439,25 @@ a {
   gap: 12px;
 }
 
+/* Responsive picks grid for 5-column layouts */
+@media (max-width: 1024px) {
+  .picks[style*="repeat(5"] {
+    grid-template-columns: repeat(3, minmax(140px, 1fr)) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .picks[style*="repeat(5"] {
+    grid-template-columns: repeat(2, minmax(140px, 1fr)) !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .picks[style*="repeat(5"] {
+    grid-template-columns: 1fr !important;
+  }
+}
+
 .pick-card {
   background: linear-gradient(180deg, var(--card), var(--card-2));
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -825,6 +844,27 @@ select option:focus {
 }
 
 /* Mobile Responsive Styles */
+@media (max-width: 1024px) {
+  .main-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .main-grid > aside {
+    position: relative !important;
+    top: auto !important;
+    order: 3;
+  }
+
+  .main-grid > div:first-child {
+    order: 1;
+  }
+
+  .main-grid > div:nth-child(2) {
+    order: 2;
+  }
+}
+
 @media (max-width: 768px) {
   .app {
     padding: 12px 8px;
@@ -833,8 +873,20 @@ select option:focus {
   .topbar {
     padding: 10px 12px;
     gap: 12px;
-    flex-direction: column;
-    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .topbar > div:last-child {
+    margin-left: 0 !important;
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .brand {
+    width: 100%;
+    justify-content: center;
   }
 
   .brand .logo {
@@ -845,14 +897,18 @@ select option:focus {
     gap: 4px;
     justify-content: center;
     width: 100%;
+    flex-wrap: wrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .tab {
-    padding: 10px 14px;
-    font-size: 14px;
-    flex: 1;
-    min-width: 0;
+    padding: 8px 12px;
+    font-size: 13px;
+    flex: 1 1 auto;
+    min-width: fit-content;
     text-align: center;
+    white-space: nowrap;
   }
 
   .panel {
@@ -865,8 +921,8 @@ select option:focus {
   }
 
   .picks {
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-    gap: 8px;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)) !important;
+    gap: 10px;
   }
 
   .flip-grid {
@@ -882,6 +938,7 @@ select option:focus {
   .modal {
     width: 95vw;
     padding: 16px;
+    max-height: 90vh;
   }
 
   .modal-grid {
@@ -904,9 +961,20 @@ select option:focus {
     height: 40px;
   }
 
-  .theme-toggle img {
-    width: 24px;
-    height: 24px;
+  .theme-toggle svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .badge {
+    font-size: 12px;
+    padding: 4px 10px;
   }
 }
 
@@ -917,35 +985,89 @@ select option:focus {
 
   .topbar {
     padding: 8px 10px;
+    gap: 8px;
+  }
+
+  .topbar > div:last-child {
+    gap: 6px !important;
   }
 
   .brand .logo {
-    height: 80px;
+    height: 70px;
+  }
+
+  .tabs {
+    gap: 2px;
+    font-size: 11px;
   }
 
   .tab {
-    padding: 8px 10px;
-    font-size: 12px;
+    padding: 6px 8px;
+    font-size: 11px;
   }
 
   .panel {
     padding: 12px;
+    margin: 8px 0;
   }
 
   .panel h2 {
-    font-size: 20px;
+    font-size: 18px;
+    letter-spacing: 0.5px;
   }
 
   .picks {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr !important;
+    gap: 8px;
   }
 
   .flip-grid {
     grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .inv-grid {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 8px;
   }
 
   .modal-grid {
     grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+
+  .btn {
+    padding: 8px 14px;
+    font-size: 13px;
+  }
+
+  .btn.big {
+    padding: 12px 18px;
+    font-size: 15px;
+  }
+
+  .theme-toggle {
+    width: 36px;
+    height: 36px;
+  }
+
+  .theme-toggle svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .badge {
+    font-size: 11px;
+    padding: 3px 8px;
+  }
+
+  .pick-card {
+    padding: 10px;
+  }
+
+  .pick-empty {
+    height: 140px;
+    font-size: 12px;
   }
 }
 
@@ -955,11 +1077,126 @@ select option:focus {
     padding: 16px 12px;
   }
 
+  .main-grid {
+    grid-template-columns: 200px 1fr 240px !important;
+    gap: 12px !important;
+  }
+
   .picks {
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)) !important;
   }
 
   .flip-grid {
     grid-template-columns: repeat(3, 1fr);
+  }
+
+  .topbar {
+    flex-wrap: wrap;
+  }
+
+  .tabs {
+    flex-wrap: wrap;
+  }
+}
+
+/* Prices Page Mobile */
+@media (max-width: 768px) {
+  .price-row {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+    padding: 12px !important;
+  }
+
+  .price-row > div:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .price-row > div:not(:first-child) {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+  }
+
+  .price-row > div:not(:first-child)::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--muted-inv);
+    margin-right: 8px;
+  }
+}
+
+/* Arena Page Mobile */
+@media (max-width: 768px) {
+  .arena-inventory-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .arena-tokens-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+}
+
+/* Leaderboard Table Mobile */
+@media (max-width: 768px) {
+  .leaderboard-header {
+    grid-template-columns: 60px 1fr 100px !important;
+    gap: 8px !important;
+    padding: 12px !important;
+    font-size: 12px !important;
+  }
+
+  .leaderboard-header > div:nth-child(4),
+  .leaderboard-header > div:nth-child(5) {
+    display: none;
+  }
+
+  .leaderboard-row {
+    grid-template-columns: 60px 1fr 100px !important;
+    gap: 8px !important;
+    padding: 12px !important;
+    font-size: 12px !important;
+  }
+
+  .leaderboard-row > div:nth-child(4),
+  .leaderboard-row > div:nth-child(5) {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .leaderboard-header {
+    grid-template-columns: 50px 1fr 80px !important;
+    gap: 6px !important;
+    padding: 10px !important;
+    font-size: 11px !important;
+  }
+
+  .leaderboard-row {
+    grid-template-columns: 50px 1fr 80px !important;
+    gap: 6px !important;
+    padding: 10px !important;
+    font-size: 11px !important;
+  }
+}
+
+/* History Page Mobile */
+@media (max-width: 768px) {
+  .arena-history-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+    text-align: center !important;
+  }
+
+  .arena-history-grid > div:last-child {
+    text-align: center !important;
+  }
+
+  .arena-history-grid > div:nth-child(2) {
+    order: -1;
+    margin-bottom: 8px;
   }
 }
