@@ -4,7 +4,8 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
 
 type LeaderboardEntry = {
   rank: number
-  username: string
+  id: string
+  name: string
   totalPoints: number
   roundsPlayed: number
   bestRound: number
@@ -12,60 +13,17 @@ type LeaderboardEntry = {
   avatar?: string
 }
 
-// Demo data
-const DEMO_LEADERBOARD: LeaderboardEntry[] = [
-  { rank: 1, username: "crypto_whale", totalPoints: 15420, roundsPlayed: 12, bestRound: 2840, isCurrentUser: false, avatar: DEFAULT_AVATAR },
-  { rank: 2, username: "flip_master", totalPoints: 12850, roundsPlayed: 15, bestRound: 1950, isCurrentUser: false, avatar: DEFAULT_AVATAR },
-  { rank: 3, username: "virtual_trader", totalPoints: 11230, roundsPlayed: 10, bestRound: 1680, isCurrentUser: false, avatar: DEFAULT_AVATAR },
-  { rank: 4, username: "ai_predictor", totalPoints: 9870, roundsPlayed: 14, bestRound: 1420, isCurrentUser: false, avatar: DEFAULT_AVATAR },
-  { rank: 5, username: "token_hunter", totalPoints: 8650, roundsPlayed: 11, bestRound: 1350, isCurrentUser: false, avatar: DEFAULT_AVATAR },
-  { rank: 6, username: "flip_flopper", totalPoints: 7430, roundsPlayed: 13, bestRound: 1180, isCurrentUser: true, avatar: DEFAULT_AVATAR },
-  { rank: 7, username: "crypto_ninja", totalPoints: 6540, roundsPlayed: 9, bestRound: 980, isCurrentUser: false, avatar: DEFAULT_AVATAR },
-  { rank: 8, username: "virtual_agent", totalPoints: 5870, roundsPlayed: 12, bestRound: 890, isCurrentUser: false, avatar: DEFAULT_AVATAR },
-  { rank: 9, username: "prediction_pro", totalPoints: 5230, roundsPlayed: 8, bestRound: 750, isCurrentUser: false, avatar: DEFAULT_AVATAR },
-  { rank: 10, username: "flip_champion", totalPoints: 4890, roundsPlayed: 10, bestRound: 680, isCurrentUser: false, avatar: DEFAULT_AVATAR },
-]
-
 export default function Leaderboard(){
   const [timeUntilReset, setTimeUntilReset] = useState('')
   const [mounted, setMounted] = useState(false)
   const [user, setUser] = useState<any>(null)
-  const [points, setPoints] = useState(0)
-
-  const leaderboard = useMemo(() => {
-    const base = DEMO_LEADERBOARD.map(entry => ({ ...entry, isCurrentUser: false }))
-    if (!user) {
-      return DEMO_LEADERBOARD
-    }
-
-    let found = false
-    const updated = base.map(entry => {
-      if (entry.username.toLowerCase() === String(user.username || '').toLowerCase()) {
-        found = true
-        return { ...entry, isCurrentUser: true, totalPoints: points, avatar: user.avatar || DEFAULT_AVATAR }
-      }
-      return entry
-    })
-
-    if (!found) {
-      updated.push({
-        rank: updated.length + 1,
-        username: user.username,
-        totalPoints: points,
-        roundsPlayed: 0,
-        bestRound: 0,
-        isCurrentUser: true,
-        avatar: user.avatar || DEFAULT_AVATAR
-      })
-    }
-
-    return updated.map((entry, idx) => ({ ...entry, rank: idx + 1 }))
-  }, [user, points])
+  const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     setMounted(true)
     
-    // Check if user is logged in (optional)
+    // Check if user is logged in
     const savedUser = localStorage.getItem('flipflop-user')
     if (savedUser) {
       const parsed = JSON.parse(savedUser)
@@ -75,11 +33,50 @@ export default function Leaderboard(){
       }
       setUser(parsed)
     }
-    const savedPoints = localStorage.getItem('flipflop-points')
-    if (savedPoints) {
-      setPoints(parseInt(savedPoints, 10) || 0)
-    }
+
+    // Load leaderboard data from API
+    loadLeaderboard()
   }, [])
+
+  async function loadLeaderboard() {
+    try {
+      setLoading(true)
+      const r = await fetch('/api/leaderboard')
+      const j = await r.json()
+      if (j?.ok && Array.isArray(j.users)) {
+        const entries: LeaderboardEntry[] = j.users.map((u: any, idx: number) => ({
+          rank: idx + 1,
+          id: u.id,
+          name: u.name || u.id,
+          totalPoints: u.totalPoints || 0,
+          roundsPlayed: u.roundsPlayed || 0,
+          bestRound: u.bestRound || 0,
+          isCurrentUser: user && u.id === user.id,
+          avatar: u.avatar || DEFAULT_AVATAR
+        }))
+        setLeaderboardData(entries)
+      }
+    } catch (err) {
+      console.error('Failed to load leaderboard:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Reload when user changes
+  useEffect(() => {
+    if (mounted && user) {
+      loadLeaderboard()
+    }
+  }, [user, mounted])
+
+  const leaderboard = useMemo(() => {
+    return leaderboardData.map((entry, idx) => ({
+      ...entry,
+      rank: idx + 1,
+      isCurrentUser: user && entry.id === user.id
+    }))
+  }, [leaderboardData, user])
 
   useEffect(()=>{
     function updateTimer(){
@@ -219,8 +216,17 @@ export default function Leaderboard(){
           </div>
           
           {/* Table Rows */}
-          {leaderboard.map((entry) => (
-            <div key={entry.rank} style={getRowStyle(entry)}>
+          {loading ? (
+            <div style={{padding: 40, textAlign: 'center', color: 'var(--muted-inv)'}}>
+              Loading leaderboard...
+            </div>
+          ) : leaderboard.length === 0 ? (
+            <div style={{padding: 40, textAlign: 'center', color: 'var(--muted-inv)'}}>
+              No players yet. Be the first to earn points!
+            </div>
+          ) : (
+          leaderboard.map((entry) => (
+            <div key={entry.id} style={getRowStyle(entry)}>
               <div style={{
                 fontSize: entry.rank <= 3 ? 20 : 16,
                 fontWeight: 900,
@@ -248,12 +254,12 @@ export default function Leaderboard(){
                 }}>
                   <img
                     src={entry.avatar || DEFAULT_AVATAR}
-                    alt={`${entry.username} avatar`}
+                    alt={`${entry.name} avatar`}
                     style={{width:'100%', height:'100%', objectFit:'cover'}}
                     onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR }}
                   />
                 </div>
-                <span style={{color: 'var(--text-inv)'}}>{entry.username}</span>
+                <span style={{color: 'var(--text-inv)'}}>{entry.name}</span>
                 {entry.isCurrentUser && (
                   <span className="badge" style={{
                     background: 'rgba(0,207,163,.2)',
@@ -300,7 +306,7 @@ export default function Leaderboard(){
                 )}
               </div>
             </div>
-          ))}
+          )))}
         </div>
         
         <div style={{
