@@ -234,7 +234,7 @@ export default function Leaderboard(){
           background: 'rgba(0,0,0,.1)'
         }}>
           {/* Table Header */}
-          <div style={{
+          <div className="leaderboard-header" style={{
             padding: '16px 20px',
             background: 'rgba(0,0,0,.2)',
             borderBottom: '1px solid var(--border)',
@@ -265,7 +265,7 @@ export default function Leaderboard(){
             </div>
           ) : (
           leaderboard.map((entry) => (
-            <div key={entry.id} style={getRowStyle(entry)}>
+            <div key={entry.id} className="leaderboard-row" style={getRowStyle(entry)}>
               <div style={{
                 fontSize: entry.rank <= 3 ? 20 : 16,
                 fontWeight: 900,
