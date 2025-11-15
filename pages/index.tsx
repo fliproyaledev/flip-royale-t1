@@ -97,6 +97,7 @@ export default function Home(){
   const [active, setActive] = useState<RoundPick[]>([])
   const [nextRound, setNextRound] = useState<RoundPick[]>(Array(5).fill(null))
   const [nextRoundLoaded, setNextRoundLoaded] = useState(false) // Flag to prevent overwriting loaded data
+  const [nextRoundSaved, setNextRoundSaved] = useState(false) // Flag to track if picks are saved
   const [currentPack, setCurrentPack] = useState<{ dayKey:string; cards:string[]; opened:boolean } | null>(null)
   const [prices, setPrices] = useState<Record<string,{p0:number;pLive:number;pClose:number;changePct?:number;source?:'dexscreener'|'fallback'}>>({})
   const [reveals, setReveals] = useState([false,false,false,false,false])
@@ -303,6 +304,12 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
         console.log('✅ [LOAD] Restoring nextRound from pre-loaded value:', savedNextRound)
         setNextRound(savedNextRound)
         setNextRoundLoaded(true)
+        // Check if all picks are filled to mark as saved
+        const hasAllPicks = savedNextRound.every(p => p !== null)
+        if (hasAllPicks) {
+          setNextRoundSaved(true)
+          console.log('✅ [LOAD] Marked nextRound as saved (all 5 picks filled)')
+        }
       } else {
         // Try to load again if pre-load failed
         const savedNext = localStorage.getItem('flipflop-next')
@@ -322,6 +329,12 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
                 console.log('✅ [LOAD] Loaded nextRound on second attempt:', parsed)
                 setNextRound(parsed)
                 setNextRoundLoaded(true)
+                // Check if all picks are filled to mark as saved
+                const hasAllPicks = parsed.every((p: any) => p !== null)
+                if (hasAllPicks) {
+                  setNextRoundSaved(true)
+                  console.log('✅ [LOAD] Marked nextRound as saved (all 5 picks filled)')
+                }
               } else {
                 console.warn('⚠️ [LOAD] Invalid nextRound data structure, but keeping saved data anyway')
                 // Even if invalid, try to preserve it
@@ -374,6 +387,24 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
 
   useEffect(()=>{ const id=setInterval(()=>setNow(Date.now()), 4000); return ()=>clearInterval(id) },[])
 
+  // CRITICAL: Auto-save nextRound to localStorage whenever it changes
+  // This ensures data is never lost, even if user forgets to click "Save Picks"
+  useEffect(() => {
+    if (!stateLoaded || !nextRoundLoaded) return
+    
+    // Don't auto-save if it's empty (initial state)
+    const hasData = nextRound.some(p => p !== null)
+    if (!hasData) return
+    
+    try {
+      const serialized = JSON.stringify(nextRound)
+      localStorage.setItem('flipflop-next', serialized)
+      console.log('💾 [AUTO-SAVE] Auto-saved nextRound to localStorage:', nextRound)
+    } catch (e) {
+      console.error('❌ [AUTO-SAVE] Failed to auto-save nextRound:', e)
+    }
+  }, [nextRound, stateLoaded, nextRoundLoaded])
+
   // CRITICAL: Ensure nextRound is loaded from localStorage on every mount
   // This is a safety check to prevent data loss
   useEffect(() => {
@@ -381,7 +412,7 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
     
     // Double-check: if nextRound is empty but localStorage has data, load it
     const hasEmptyNextRound = nextRound.every(p => p === null)
-    if (hasEmptyNextRound) {
+    if (hasEmptyNextRound && !nextRoundSaved) {
       const savedNext = localStorage.getItem('flipflop-next')
       if (savedNext) {
         try {
@@ -392,6 +423,7 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
               console.log('🔄 [SAFETY] Restoring nextRound from localStorage (empty state detected):', parsed)
               setNextRound(parsed)
               setNextRoundLoaded(true)
+              setNextRoundSaved(true)
             }
           }
         } catch (e) {
@@ -399,7 +431,7 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
         }
       }
     }
-  }, [stateLoaded, nextRound])
+  }, [stateLoaded])
 
   // Update Global Movers periodically
   useEffect(() => {
@@ -806,7 +838,8 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
       }
       setNextRound(newNextRound)
       setNextRoundLoaded(true)
-      // Note: User must click "Save Picks" to persist changes
+      setNextRoundSaved(false) // Mark as unsaved when modified
+      // Auto-save will handle persistence via useEffect
       closeModal()
     } else {
       alert('All slots are filled! Remove a card first.')
@@ -818,7 +851,7 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
     newNextRound[index] = null
     setNextRound(newNextRound)
     setNextRoundLoaded(true)
-    // Note: User must click "Save Picks" to persist changes
+    setNextRoundSaved(false) // Mark as unsaved when modified
   }
 
   function saveNextRoundPicks() {
@@ -827,6 +860,13 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
       if (!Array.isArray(nextRound) || nextRound.length !== 5) {
         console.error('Invalid nextRound structure:', nextRound)
         alert('Invalid picks data. Please try selecting cards again.')
+        return
+      }
+      
+      // Check if all 5 slots are filled
+      const filledCount = nextRound.filter(p => p !== null).length
+      if (filledCount === 0) {
+        alert('Please select at least one card before saving.')
         return
       }
       
@@ -842,15 +882,26 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
       }
       
       setNextRoundLoaded(true)
-      console.log('✅ Saved nextRound picks to localStorage:', nextRound)
-      console.log('✅ Verification: localStorage contains', verify ? 'data' : 'nothing')
+      setNextRoundSaved(true) // Mark as saved
+      console.log('✅ [SAVE] Saved nextRound picks to localStorage:', nextRound)
+      console.log('✅ [SAVE] Verification: localStorage contains', verify ? 'data' : 'nothing')
       
       // Show success feedback
-      alert('Picks saved successfully! Your selections are now saved.')
+      alert(`Picks saved successfully! ${filledCount}/5 cards selected.`)
     } catch (e) {
       console.error('Failed to save nextRound picks:', e)
       alert('Failed to save picks. Please try again.')
     }
+  }
+
+  function enableEditing() {
+    setNextRoundSaved(false)
+    console.log('🔄 [CHANGE] User wants to modify picks')
+  }
+
+  function changeNextRoundPicks() {
+    setNextRoundSaved(false)
+    console.log('🔄 [CHANGE] User wants to modify picks')
   }
 
   function toggleLock(index: number) {
@@ -1615,7 +1666,8 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
                              newNextRound[index].dir = 'UP'
                              setNextRound(newNextRound)
                              setNextRoundLoaded(true)
-                             // Note: User must click "Save Picks" to persist changes
+                             setNextRoundSaved(false) // Mark as unsaved when modified
+                             // Auto-save will handle persistence via useEffect
                            }}
                          >
                            ▲ UP
@@ -1628,7 +1680,7 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
                              newNextRound[index].dir = 'DOWN'
                              setNextRound(newNextRound)
                              setNextRoundLoaded(true)
-                             // Note: User must click "Save Picks" to persist changes
+                             setNextRoundSaved(false) // Mark as unsaved when modified
                            }}
                          >
                            ▼ DOWN
@@ -1639,6 +1691,7 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
                          className="btn" 
                         style={{fontSize: 10, padding: '6px 12px', fontWeight: 600}}
                          onClick={() => removeFromNextRound(index)}
+                         disabled={nextRoundSaved}
                        >
                          Remove
                        </button>
@@ -1649,26 +1702,30 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
              } else {
                // Empty slot
                return (
-                 <div key={index} style={{
+                 <div key={index}
+                 onClick={() => !nextRoundSaved && setModalOpen({open: true, type: 'select'})}
+                 style={{
                    border: '2px dashed rgba(255,255,255,0.3)',
                    background: 'rgba(255,255,255,0.05)',
                    borderRadius: 20,
                    padding: 24,
-                   cursor: 'pointer',
+                   cursor: nextRoundSaved ? 'not-allowed' : 'pointer',
                    display: 'flex',
                    flexDirection: 'column',
                    alignItems: 'center',
                    justifyContent: 'center',
                    gap: 12,
-                  minHeight: 240,
-                   transition: 'all 0.3s ease'
+                   minHeight: 240,
+                   transition: 'all 0.3s ease',
+                   opacity: nextRoundSaved ? 0.5 : 1
                  }}
-                 onClick={() => setModalOpen({open: true, type: 'select'})}
                  onMouseEnter={(e) => {
+                   if (nextRoundSaved) return;
                    e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
                    e.currentTarget.style.border = '2px dashed rgba(255,255,255,0.5)';
                  }}
                  onMouseLeave={(e) => {
+                   if (nextRoundSaved) return;
                    e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
                    e.currentTarget.style.border = '2px dashed rgba(255,255,255,0.3)';
                  }}>
@@ -1707,55 +1764,118 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
           })}
         </div>
         
-        {/* Save Picks Button */}
+        {/* Save Picks / Change Button */}
         <div style={{
           marginTop: 24,
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
-          gap: 12
+          gap: 12,
+          flexDirection: 'column'
         }}>
-          <button
-            onClick={saveNextRoundPicks}
-            className="btn"
-            style={{
-              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-              border: '2px solid rgba(16, 185, 129, 0.5)',
-              color: 'white',
-              fontSize: 16,
-              fontWeight: 700,
-              padding: '14px 32px',
-              borderRadius: 12,
-              cursor: 'pointer',
-              boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2)',
-              transition: 'all 0.3s ease',
-              textTransform: 'uppercase',
-              letterSpacing: 1.2,
+          {nextRoundSaved ? (
+            // Saved state - show "Change" button
+            <div style={{
               display: 'flex',
               alignItems: 'center',
-              gap: 8
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'linear-gradient(135deg, #059669 0%, #047857 100%)'
-              e.currentTarget.style.transform = 'translateY(-2px)'
-              e.currentTarget.style.boxShadow = '0 6px 20px rgba(16, 185, 129, 0.5), 0 4px 12px rgba(0, 0, 0, 0.3)'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
-              e.currentTarget.style.transform = 'translateY(0)'
-              e.currentTarget.style.boxShadow = '0 4px 14px rgba(16, 185, 129, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2)'
-            }}
-          >
-            <span>💾</span>
-            <span>Save Picks</span>
-          </button>
-          <div style={{
-            fontSize: 12,
-            color: 'rgba(255, 255, 255, 0.7)',
-            fontStyle: 'italic'
-          }}>
-            Click to save your selections
-          </div>
+              gap: 12
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                background: 'rgba(16, 185, 129, 0.2)',
+                border: '2px solid rgba(16, 185, 129, 0.5)',
+                borderRadius: 12,
+                padding: '12px 24px',
+                color: '#86efac',
+                fontSize: 16,
+                fontWeight: 700
+              }}>
+                <span>✅</span>
+                <span>Picks Saved</span>
+              </div>
+              <button
+                onClick={enableEditing}
+                className="btn"
+                style={{
+                  background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                  border: '2px solid rgba(245, 158, 11, 0.5)',
+                  color: 'white',
+                  fontSize: 16,
+                  fontWeight: 700,
+                  padding: '14px 32px',
+                  borderRadius: 12,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(245, 158, 11, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2)',
+                  transition: 'all 0.3s ease',
+                  textTransform: 'uppercase',
+                  letterSpacing: 1.2,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, #d97706 0%, #b45309 100%)'
+                  e.currentTarget.style.transform = 'translateY(-2px)'
+                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(245, 158, 11, 0.5), 0 4px 12px rgba(0, 0, 0, 0.3)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
+                  e.currentTarget.style.transform = 'translateY(0)'
+                  e.currentTarget.style.boxShadow = '0 4px 14px rgba(245, 158, 11, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2)'
+                }}
+              >
+                <span>✏️</span>
+                <span>Change</span>
+              </button>
+            </div>
+          ) : (
+            // Unsaved state - show "Save Picks" button
+            <>
+              <button
+                onClick={saveNextRoundPicks}
+                className="btn"
+                style={{
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  border: '2px solid rgba(16, 185, 129, 0.5)',
+                  color: 'white',
+                  fontSize: 16,
+                  fontWeight: 700,
+                  padding: '14px 32px',
+                  borderRadius: 12,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2)',
+                  transition: 'all 0.3s ease',
+                  textTransform: 'uppercase',
+                  letterSpacing: 1.2,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, #059669 0%, #047857 100%)'
+                  e.currentTarget.style.transform = 'translateY(-2px)'
+                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(16, 185, 129, 0.5), 0 4px 12px rgba(0, 0, 0, 0.3)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                  e.currentTarget.style.transform = 'translateY(0)'
+                  e.currentTarget.style.boxShadow = '0 4px 14px rgba(16, 185, 129, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2)'
+                }}
+              >
+                <span>💾</span>
+                <span>Save Picks</span>
+              </button>
+              <div style={{
+                fontSize: 12,
+                color: 'rgba(255, 255, 255, 0.7)',
+                fontStyle: 'italic'
+              }}>
+                Click to save your selections
+              </div>
+            </>
+          )}
         </div>
       </div>
 
