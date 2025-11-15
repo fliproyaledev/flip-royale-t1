@@ -1402,7 +1402,17 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
               fontSize:16
             }}>5000 POINTS</div>
             <div style={{display:'flex', alignItems:'center', justifyContent:'center', gap:6, marginTop:6}}>
-              <button className="btn" onClick={()=>setBuyQty(q=>Math.max(1, q-1))} style={{padding:'8px 12px', fontSize:14}}>-</button>
+              <button 
+                className="btn" 
+                onClick={()=>setBuyQty(q=>Math.max(1, q-1))} 
+                style={{
+                  padding:'8px 12px', 
+                  fontSize:14,
+                  color: theme === 'light' ? '#0a2c21' : 'var(--text-inv)',
+                  borderColor: theme === 'light' ? 'rgba(10,44,33,0.3)' : 'rgba(255,255,255,0.12)',
+                  background: theme === 'light' ? 'rgba(255,255,255,0.9)' : 'linear-gradient(180deg, rgba(16, 33, 27, 0.85), rgba(12, 26, 21, 0.7))'
+                }}
+              >-</button>
               <div style={{
                 width:40, 
                 textAlign:'center', 
@@ -1410,7 +1420,17 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
                 fontSize:16,
                 color: theme === 'light' ? '#0a2c21' : 'var(--text-inv)'
               }}>{buyQty}</div>
-              <button className="btn" onClick={()=>setBuyQty(q=>Math.min(10, q+1))} style={{padding:'8px 12px', fontSize:14}}>+</button>
+              <button 
+                className="btn" 
+                onClick={()=>setBuyQty(q=>Math.min(10, q+1))} 
+                style={{
+                  padding:'8px 12px', 
+                  fontSize:14,
+                  color: theme === 'light' ? '#0a2c21' : 'var(--text-inv)',
+                  borderColor: theme === 'light' ? 'rgba(10,44,33,0.3)' : 'rgba(255,255,255,0.12)',
+                  background: theme === 'light' ? 'rgba(255,255,255,0.9)' : 'linear-gradient(180deg, rgba(16, 33, 27, 0.85), rgba(12, 26, 21, 0.7))'
+                }}
+              >+</button>
             </div>
             <button className="btn" onClick={buyMysteryPacks} style={{
               marginTop:8,
@@ -1423,7 +1443,13 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
               padding:'12px 0'
             }}>Buy</button>
           </div>
-          <div style={{marginTop:10, fontSize:13, color:'var(--muted-inv)', textAlign:'center'}}>1 pack = 5 cards. Costs points.</div>
+          <div style={{
+            marginTop:10, 
+            fontSize:13, 
+            color: theme === 'light' ? '#0b4634' : 'var(--muted-inv)', 
+            textAlign:'center',
+            fontWeight: theme === 'light' ? 600 : 400
+          }}>1 pack = 5 cards. Costs points.</div>
         </div>
 
         <div style={{display:'flex', flexDirection:'column', gap:16}}>
