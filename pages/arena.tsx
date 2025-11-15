@@ -619,11 +619,11 @@ export default function Arena(){
                       </div>
                     </div>
                     <div className="sep"></div>
-                    <div style={{display:'grid', gridTemplateColumns:'1.3fr 1fr', gap:16}}>
+                    <div className="arena-inventory-grid" style={{display:'grid', gridTemplateColumns:'1.3fr 1fr', gap:16}}>
                       <div>
                         <div style={{fontWeight:900, marginBottom:8}}>Your Inventory</div>
                         <div style={{maxHeight:360, overflowY:'auto'}}>
-                          <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(210px, 1fr))', gap:12}}>
+                          <div className="arena-tokens-grid" style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(210px, 1fr))', gap:12}}>
                             {ownedTokens.filter(o=>o.have>0).map(({tok, have, used}, idx)=>{
                               const left = have - used
                               const canAdd = left>0 && selected.length<5
