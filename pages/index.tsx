@@ -185,6 +185,14 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
         } catch {}
       }
       loadUserPoints()
+      
+      // Refresh points periodically
+      const pointsInterval = setInterval(() => {
+        loadUserPoints()
+      }, 30000) // Refresh every 30 seconds
+      
+      // Cleanup interval on unmount
+      return () => clearInterval(pointsInterval)
     } else {
       // Redirect to auth page if no user
       window.location.href = '/auth'
@@ -321,15 +329,37 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
   // Persist points
   useEffect(()=>{ try { localStorage.setItem('flipflop-points', String(points)) } catch {} },[points])
 
-  function buyMysteryPacks(){
+  async function buyMysteryPacks(){
+    if (!user) { alert('Please log in first.'); return }
     const qty = Math.max(1, Math.min(10, buyQty))
     const cost = 5000 * qty
     if (points < cost) { alert('Not enough points.'); return }
-    setPoints(p=>p-cost)
-    // Generate cards: random 5 per pack
-    const totalCards = qty * 5
-    const cards: string[] = Array.from({length: totalCards}, ()=> TOKENS[randInt(TOKENS.length)].id)
-    setShowMysteryResults({open:true, cards})
+    
+    try {
+      const r = await fetch('/api/users/purchase-pack', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, cost, packType: 'mystery' })
+      })
+      const j = await r.json()
+      if (!j.ok) {
+        alert(j.error || 'Purchase failed')
+        return
+      }
+      
+      // Update points from server response
+      setPoints(j.bankPoints || 0)
+      try {
+        localStorage.setItem('flipflop-points', String(j.bankPoints || 0))
+      } catch {}
+      
+      // Generate cards: random 5 per pack
+      const totalCards = qty * 5
+      const cards: string[] = Array.from({length: totalCards}, ()=> TOKENS[randInt(TOKENS.length)].id)
+      setShowMysteryResults({open:true, cards})
+    } catch (e: any) {
+      alert(e?.message || 'Purchase failed')
+    }
   }
 
   function addMysteryToInventory(){
@@ -878,27 +908,44 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
            {/* Daily free/opened pack removed in beta */}
            
                        {user ? (
-             <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
-               <div style={{
-                 width: 44,
-                 height: 44,
-                 borderRadius: '50%',
-                 overflow: 'hidden',
-                 border: '2px solid rgba(255,255,255,0.25)',
-                 boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
-                 background: 'rgba(255,255,255,0.1)',
-                 display: 'flex',
-                 alignItems: 'center',
-                 justifyContent: 'center'
-               }}>
-                 <img
-                   src={user.avatar || DEFAULT_AVATAR}
-                   alt={user.username}
-                   style={{width: '100%', height: '100%', objectFit: 'cover'}}
-                   onError={(e) => {
-                     (e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR
-                   }}
-                 />
+             <div style={{display: 'flex', alignItems: 'center', gap: 12, flexDirection: 'column'}}>
+               <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
+                 <div style={{
+                   width: 44,
+                   height: 44,
+                   borderRadius: '50%',
+                   overflow: 'hidden',
+                   border: '2px solid rgba(255,255,255,0.25)',
+                   boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+                   background: 'rgba(255,255,255,0.1)',
+                   display: 'flex',
+                   alignItems: 'center',
+                   justifyContent: 'center'
+                 }}>
+                   <img
+                     src={user.avatar || DEFAULT_AVATAR}
+                     alt={user.username}
+                     style={{width: '100%', height: '100%', objectFit: 'cover'}}
+                     onError={(e) => {
+                       (e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR
+                     }}
+                   />
+                 </div>
+                 
+                 <div style={{
+                   background: 'rgba(0,207,163,0.15)',
+                   border: '1px solid rgba(0,207,163,0.25)',
+                   borderRadius: 10,
+                   padding: '6px 12px',
+                   fontSize: 15,
+                   fontWeight: 700,
+                   color: '#86efac',
+                   textShadow: '0 1px 2px rgba(0,0,0,0.3)',
+                   minWidth: 100,
+                   textAlign: 'center'
+                 }}>
+                   {points.toLocaleString()} pts
+                 </div>
                </div>
               
               <button
@@ -907,9 +954,9 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
                    background: 'rgba(239,68,68,0.2)',
                    border: '1px solid rgba(239,68,68,0.3)',
                    color: '#fca5a5',
-                   padding: '8px 16px',
-                   borderRadius: 10,
-                   fontSize: 14,
+                   padding: '6px 12px',
+                   borderRadius: 8,
+                   fontSize: 13,
                    fontWeight: 600,
                    cursor: 'pointer',
                    transition: 'all 0.3s'
