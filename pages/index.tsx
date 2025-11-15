@@ -1359,7 +1359,13 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
         </div>
       </header>
 
-      <div style={{display:'grid', gridTemplateColumns:'minmax(220px, 250px) 1fr minmax(260px, 300px)', gap:16, alignItems:'start', width:'100%'}}>
+      <div style={{
+        display:'grid', 
+        gridTemplateColumns:'minmax(220px, 250px) 1fr minmax(260px, 300px)', 
+        gap:16, 
+        alignItems:'start', 
+        width:'100%'
+      }} className="main-grid">
         {/* Left Sidebar: Common Pack */}
         <div className="panel" style={{padding:12, position:'sticky', top:16, alignSelf:'start', background:'linear-gradient(180deg, rgba(0,0,0,.35), rgba(0,0,0,.28))'}}>
           <div style={{textAlign:'center', marginBottom:6}}>
@@ -1397,9 +1403,10 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
             <div style={{
               textAlign:'center', 
               marginTop:8, 
-              color: theme === 'light' ? '#0a2c21' : '#cbd5e1', 
+              color: '#cbd5e1', 
               fontWeight:800, 
-              fontSize:16
+              fontSize:16,
+              textShadow: '0 1px 2px rgba(0,0,0,0.5)'
             }}>5000 POINTS</div>
             <div style={{display:'flex', alignItems:'center', justifyContent:'center', gap:6, marginTop:6}}>
               <button 
@@ -1418,7 +1425,8 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
                 textAlign:'center', 
                 fontWeight:900, 
                 fontSize:16,
-                color: theme === 'light' ? '#0a2c21' : 'var(--text-inv)'
+                color: '#ffffff',
+                textShadow: '0 1px 2px rgba(0,0,0,0.5)'
               }}>{buyQty}</div>
               <button 
                 className="btn" 
@@ -1473,7 +1481,7 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
               Boost ends in: {formatRemaining(boost.endAt! - now)}
             </span>
           )}
-        </div>
+          </div>
         <div className="sep"></div>
 
         {/* Starter Reward Banner */}
@@ -1482,7 +1490,7 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
             <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:12}}>
               <div style={{fontWeight:900, color:'#bbf7d0'}}>🎁 Starter Reward available: 50,000 points + 1 Common Pack</div>
               <button className="btn primary" onClick={() => claimStarterReward()}>Claim</button>
-            </div>
+        </div>
           </div>
         )}
 
@@ -1689,7 +1697,7 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
           textShadow: theme === 'light' ? 'none' : '0 3px 10px rgba(0,0,0,0.35)'
         }}>Next Round - Beta #1</h2>
         <div className="sep"></div>
-        
+
         <div className="picks" style={{display:'grid', gridTemplateColumns:'repeat(5, minmax(160px, 1fr))', gap:14}}>
            {Array.from({ length: 5 }, (_, index) => {
              const p = nextRound[index]
@@ -1698,7 +1706,7 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
                const tok = getTokenById(p.tokenId) || TOKENS[0]
                if (!tok) return null // Safety check
                
-            return (
+              return (
                 <div key={index} style={{
                    background: `linear-gradient(135deg, ${getGradientColor(index)}, ${getGradientColor(index + 1)})`,
                    borderRadius: 18,
@@ -1811,9 +1819,9 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
                          Remove
                        </button>
                      </div>
-                   </div>
-              </div>
-            )
+                  </div>
+                </div>
+              )
              } else {
                // Empty slot
                return (
@@ -1876,8 +1884,8 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
                  </div>
                )
              }
-          })}
-        </div>
+            })}
+          </div>
         
         {/* Save Picks / Change Button */}
         <div style={{
