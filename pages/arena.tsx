@@ -41,13 +41,15 @@ export default function Arena(){
   const [user, setUser] = useState<any>(null)
   const [rooms, setRooms] = useState<DuelRoom[]>([])
   const [room, setRoom] = useState<DuelRoom|null>(null)
-  const [bank, setBank] = useState<number>(0)
+  const [points, setPoints] = useState<number>(0)
   const [inventory, setInventory] = useState<Record<string, number>>({})
   const [selected, setSelected] = useState<PickSel[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string|null>(null)
   const [search, setSearch] = useState('')
+  
+  const DEFAULT_AVATAR = '/avatars/default-avatar.png'
 
   async function loadRooms(){
     setLoading(true)
@@ -77,21 +79,33 @@ export default function Arena(){
     }catch(e:any){ setError(e?.message||'Load room failed') }
   }
 
-  async function loadUserBank(u:any){
+  async function loadUserPoints(u:any){
     if(!u) return
     try{
       const r = await fetch(`/api/users/me?userId=${encodeURIComponent(u.id)}`)
       const j = await r.json()
-      if (j?.ok) setBank(j.user?.bankPoints||0)
+      if (j?.ok) {
+        setPoints(j.user?.bankPoints||0)
+        try {
+          localStorage.setItem('flipflop-points', String(j.user?.bankPoints||0))
+        } catch {}
+      }
     }catch{}
   }
 
   useEffect(()=>{
     try{
       const s = localStorage.getItem('flipflop-user')
-      if (s){ const u = JSON.parse(s); setUser(u); loadUserBank(u) }
+      if (s){ 
+        const u = JSON.parse(s)
+        setUser(u)
+        loadUserPoints(u)
+      }
       const inv = localStorage.getItem('flipflop-inventory')
       if (inv) setInventory(JSON.parse(inv))
+      // Also try to load from localStorage as fallback
+      const savedPts = localStorage.getItem('flipflop-points')
+      if (savedPts) setPoints(parseInt(savedPts) || 0)
     }catch{}
     if (roomId){
       loadRoom(roomId)
@@ -103,6 +117,15 @@ export default function Arena(){
       return ()=>clearInterval(ir)
     }
   },[roomId])
+  
+  // Refresh points periodically
+  useEffect(() => {
+    if (!user) return
+    const interval = setInterval(() => {
+      loadUserPoints(user)
+    }, 30000) // Refresh every 30 seconds
+    return () => clearInterval(interval)
+  }, [user])
 
   async function createRoom(){
     if (!user) { alert('Please register/login on PLAY page first.'); return }
@@ -112,7 +135,7 @@ export default function Arena(){
       const r = await fetch('/api/duel/create',{method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ userId: user.id, entryCost: 2500 })})
       const j = await r.json()
       if (!j.ok) throw new Error(j.error||'Create failed')
-      await loadUserBank(user)
+      await loadUserPoints(user)
       router.push(`/arena?room=${encodeURIComponent(j.room.id)}`)
     }catch(e:any){ alert(e?.message||'Create failed') }
     finally{ setCreating(false) }
@@ -125,7 +148,7 @@ export default function Arena(){
       const r=await fetch('/api/duel/cancel', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ roomId: id, userId: user.id }) })
       const j=await r.json()
       if (!j.ok) throw new Error(j.error||'Cancel failed')
-      await loadUserBank(user)
+      await loadUserPoints(user)
       if (roomId) await loadRoom(id); else await loadRooms()
     }catch(e:any){ alert(e?.message||'Cancel failed') }
   }
@@ -137,7 +160,7 @@ export default function Arena(){
       const r=await fetch('/api/duel/join', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ roomId: id, userId: user.id }) })
       const j=await r.json()
       if (!j.ok) throw new Error(j.error||'Join failed')
-      await loadUserBank(user)
+      await loadUserPoints(user)
       router.push(`/arena?room=${encodeURIComponent(id)}`)
     }catch(e:any){ alert(e?.message||'Join failed') }
   }
@@ -148,8 +171,11 @@ export default function Arena(){
       const r = await fetch('/api/users/grant', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ userId: user.id, amount: 100000 }) })
       const j = await r.json()
       if(!j.ok) throw new Error(j.error||'Grant failed')
-      setBank(j.bankPoints||0)
-      alert('100,000 test points added to your Arena balance.')
+      setPoints(j.bankPoints||0)
+      try {
+        localStorage.setItem('flipflop-points', String(j.bankPoints||0))
+      } catch {}
+      alert('100,000 test points added to your balance.')
     }catch(e:any){ alert(e?.message||'Grant failed') }
   }
 
@@ -210,7 +236,7 @@ export default function Arena(){
       const j = await r.json()
       if(!j.ok) throw new Error(j.error||'Settle failed')
       await loadRoom(room.id)
-      await loadUserBank(user)
+      await loadUserPoints(user)
     }catch(e:any){ alert(e?.message||'Settle failed') }
   }
 
@@ -309,6 +335,48 @@ export default function Arena(){
               <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
             </svg>
           </a>
+          {user && (
+            <div style={{display: 'flex', alignItems: 'center', gap: 12, flexDirection: 'column'}}>
+              <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
+                <div style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: '50%',
+                  overflow: 'hidden',
+                  border: '2px solid rgba(255,255,255,0.25)',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+                  background: 'rgba(255,255,255,0.1)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <img
+                    src={user.avatar || DEFAULT_AVATAR}
+                    alt={user.username}
+                    style={{width: '100%', height: '100%', objectFit: 'cover'}}
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR
+                    }}
+                  />
+                </div>
+                
+                <div style={{
+                  background: 'rgba(0,207,163,0.15)',
+                  border: '1px solid rgba(0,207,163,0.25)',
+                  borderRadius: 10,
+                  padding: '6px 12px',
+                  fontSize: 15,
+                  fontWeight: 700,
+                  color: '#86efac',
+                  textShadow: '0 1px 2px rgba(0,0,0,0.3)',
+                  minWidth: 100,
+                  textAlign: 'center'
+                }}>
+                  {points.toLocaleString()} pts
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </header>
 
@@ -318,8 +386,7 @@ export default function Arena(){
             <div className="row" style={{justifyContent:'space-between', alignItems:'center'}}>
               <h2>Arena</h2>
               <div style={{display:'flex', gap:12, alignItems:'center'}}>
-                <span className="badge" style={{background:'rgba(0,0,0,.25)',borderColor:'rgba(255,255,255,.2)',color:'#fff'}}>Bank: {bank.toLocaleString()} pts</span>
-                {bank < 2500 && (
+                {points < 2500 && (
                   <button className="btn" onClick={grantTest}>Get 100k Test Points</button>
                 )}
               </div>
@@ -390,7 +457,6 @@ export default function Arena(){
                 <div className="muted" style={{fontSize:12}}>Eval: {room ? new Date(room.evalAt).toUTCString() : '...'}</div>
               </div>
               <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                <span className="badge" style={{background:'rgba(0,0,0,.25)',borderColor:'rgba(255,255,255,.2)',color:'#fff'}}>Bank: {bank.toLocaleString()} pts</span>
                 <button className="btn" onClick={()=>router.push('/arena')}>Back</button>
                 {canSettle(room) && <button className="btn" onClick={settleNow}>Settle</button>}
               </div>
