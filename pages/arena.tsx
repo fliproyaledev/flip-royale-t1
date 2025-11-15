@@ -155,10 +155,28 @@ export default function Arena(){
 
   function formatTime(ts:string){ try{ return new Date(ts).toUTCString() } catch { return ts } }
   function minutesToEval(r: DuelRoom){ try { const ms = new Date(r.evalAt).getTime() - Date.now(); return Math.max(0, Math.floor(ms/60000)) } catch { return 0 } }
-  function occupancy(r: DuelRoom){ return (r.guest? 2:1) + '/2' }
+  function occupancy(r: DuelRoom){ 
+    const SYSTEM_USER_ID = 'system'
+    const hasRealHost = r.host?.userId && r.host.userId !== SYSTEM_USER_ID
+    const hasGuest = !!r.guest
+    const count = (hasRealHost ? 1 : 0) + (hasGuest ? 1 : 0)
+    return count + '/2'
+  }
 
-  function isParticipant(r: DuelRoom | null){ if(!r||!user) return false; return r.host?.userId===user.id || r.guest?.userId===user.id }
-  function mySide(r: DuelRoom | null){ if(!r||!user) return undefined as any; return r.host?.userId===user.id ? r.host : (r.guest?.userId===user.id ? r.guest : undefined) }
+  function isParticipant(r: DuelRoom | null){ 
+    if(!r||!user) return false
+    const SYSTEM_USER_ID = 'system'
+    const hasRealHost = r.host?.userId && r.host.userId !== SYSTEM_USER_ID
+    return (hasRealHost && r.host.userId===user.id) || r.guest?.userId===user.id 
+  }
+  function mySide(r: DuelRoom | null){ 
+    if(!r||!user) return undefined as any
+    const SYSTEM_USER_ID = 'system'
+    const hasRealHost = r.host?.userId && r.host.userId !== SYSTEM_USER_ID
+    if (hasRealHost && r.host.userId===user.id) return r.host
+    if (r.guest?.userId===user.id) return r.guest
+    return undefined
+  }
   function canLock(r: DuelRoom | null){ const s=mySide(r); return !!(s && s.entryPaid && !s.locked && (r?.status==='open' || r?.status==='ready' || r?.status==='locked')) }
   function canSettle(r: DuelRoom | null){ if(!r) return false; const both = r.host?.locked && r.guest?.locked; const due = new Date(r.evalAt).getTime() <= Date.now(); return both && due && r.status!=='settled' }
 
@@ -280,9 +298,11 @@ export default function Arena(){
               <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(260px, 1fr))', gap:16}}>
                 {rooms.length===0 && <div style={{padding:24,color:'var(--muted-inv)'}}>No rooms yet. Please check back soon.</div>}
                 {rooms.map((r, idx)=>{
-                  const youHost = user && r.host?.userId===user.id
+                  const SYSTEM_USER_ID = 'system'
+                  const hasRealHost = r.host?.userId && r.host.userId !== SYSTEM_USER_ID
+                  const youHost = user && r.host?.userId===user.id && hasRealHost
                   const canCancel = youHost && r.status==='open' && !r.guest
-                  const canJoin = user && r.status==='open' && !r.guest && (!youHost)
+                  const canJoin = user && r.status==='open' && !r.guest && (!hasRealHost || !youHost)
                   const mins = minutesToEval(r)
                   const occ = occupancy(r)
                   return (
@@ -307,7 +327,9 @@ export default function Arena(){
                         <div style={{textAlign:'right'}}>{mins}m</div>
                       </div>
                       <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:4}}>
-                        <div style={{fontSize:11, color:'var(--muted-inv)'}}>Host {r.host?.userId.slice(0,6)}…{r.host?.userId.slice(-4)}</div>
+                        <div style={{fontSize:11, color:'var(--muted-inv)'}}>
+                          {hasRealHost ? `Host ${r.host.userId.slice(0,6)}…${r.host.userId.slice(-4)}` : 'Empty'}
+                        </div>
                         <div style={{display:'flex', gap:8}}>
                           <button className="btn" onClick={()=>router.push(`/arena?room=${encodeURIComponent(r.id)}`)}>{canJoin?'Details':'Open'}</button>
                           {canJoin && (
@@ -350,7 +372,9 @@ export default function Arena(){
                   </div>
                   <div>
                     <div className="muted" style={{fontSize:12}}>Host</div>
-                    <div style={{color:'#fff'}}>{room.host.userId.slice(0,6)}…{room.host.userId.slice(-4)} {room.host.locked ? '(locked)':''}</div>
+                    <div style={{color:'#fff'}}>
+                      {room.host.userId === 'system' ? 'Empty' : `${room.host.userId.slice(0,6)}…${room.host.userId.slice(-4)} ${room.host.locked ? '(locked)':''}`}
+                    </div>
                   </div>
                   <div>
                     <div className="muted" style={{fontSize:12}}>Guest</div>
