@@ -111,7 +111,39 @@ export default function Profile(){
           <a className="tab" href="/history">HISTORY</a>
           <a className="tab active" href="/profile">PROFILE</a>
         </nav>
-        <div style={{display: 'flex', alignItems: 'center', gap: 12}}>
+        <div style={{display: 'flex', alignItems: 'center', gap: 16}}>
+          <a 
+            href="https://x.com/fliproyale" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 36,
+              height: 36,
+              borderRadius: '50%',
+              background: 'rgba(255,255,255,0.08)',
+              border: '1px solid rgba(255,255,255,0.15)',
+              color: 'white',
+              textDecoration: 'none',
+              transition: 'all 0.3s',
+              cursor: 'pointer'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.15)'
+              e.currentTarget.style.transform = 'scale(1.1)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.08)'
+              e.currentTarget.style.transform = 'scale(1)'
+            }}
+            title="Follow us on X"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style={{display: 'block'}}>
+              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+            </svg>
+          </a>
           <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
             <div style={{
               width: 44,
