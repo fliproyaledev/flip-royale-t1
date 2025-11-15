@@ -358,7 +358,7 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
     }
     
     try {
-      const r = await fetch('/api/users/purchase-pack', {
+      const r = await fetch('/api/users/purchasePack', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
