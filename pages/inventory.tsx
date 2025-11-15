@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { SyntheticEvent } from 'react'
+import ThemeToggle from '../components/ThemeToggle'
 import { TOKENS } from '../lib/tokens'
 
 function handleImageFallback(event: SyntheticEvent<HTMLImageElement>) {
@@ -53,8 +54,8 @@ export default function Inventory(){
           <a className="tab" href="/history">HISTORY</a>
           {user && <a className="tab" href="/profile">PROFILE</a>}
         </nav>
-        <div style={{display: 'flex', alignItems: 'center', gap: 16}}>
-          <div className="muted">Collection</div>
+        <div style={{display: 'flex', alignItems: 'center', gap: 12, marginLeft: 'auto'}}>
+          <ThemeToggle />
           <a 
             href="https://x.com/fliproyale" 
             target="_blank" 
@@ -63,23 +64,27 @@ export default function Inventory(){
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              width: 36,
-              height: 36,
-              borderRadius: '50%',
-              background: 'rgba(255,255,255,0.08)',
-              border: '1px solid rgba(255,255,255,0.15)',
+              width: 48,
+              height: 48,
+              borderRadius: 12,
+              background: 'rgba(255,255,255,0.1)',
+              border: '1px solid rgba(255,255,255,0.2)',
               color: 'white',
               textDecoration: 'none',
               transition: 'all 0.3s',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              backdropFilter: 'blur(10px)',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.background = 'rgba(255,255,255,0.15)'
-              e.currentTarget.style.transform = 'scale(1.1)'
+              e.currentTarget.style.transform = 'scale(1.05)'
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)'
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.08)'
+              e.currentTarget.style.background = 'rgba(255,255,255,0.1)'
               e.currentTarget.style.transform = 'scale(1)'
+              e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)'
             }}
             title="Follow us on X"
           >
