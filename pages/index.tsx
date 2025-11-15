@@ -331,9 +331,31 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
 
   async function buyMysteryPacks(){
     if (!user) { alert('Please log in first.'); return }
+    
+    // First, get current points from server to ensure accuracy
+    let currentPoints = points
+    try {
+      const checkR = await fetch(`/api/users/me?userId=${encodeURIComponent(user.id)}`)
+      const checkJ = await checkR.json()
+      if (checkJ?.ok && checkJ?.user?.bankPoints !== undefined) {
+        currentPoints = checkJ.user.bankPoints
+        setPoints(currentPoints)
+        try {
+          localStorage.setItem('flipflop-points', String(currentPoints))
+        } catch {}
+      }
+    } catch (e) {
+      console.warn('Failed to refresh points before purchase:', e)
+    }
+    
     const qty = Math.max(1, Math.min(10, buyQty))
     const cost = 5000 * qty
-    if (points < cost) { alert('Not enough points.'); return }
+    
+    // Check with current server points
+    if (currentPoints < cost) { 
+      alert(`Not enough points. You have ${currentPoints.toLocaleString()} pts, need ${cost.toLocaleString()} pts.`)
+      return 
+    }
     
     try {
       const r = await fetch('/api/users/purchase-pack', {
@@ -343,13 +365,19 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
       })
       
       if (!r.ok) {
-        const errorText = await r.text()
+        let errorMsg = `Purchase failed: ${r.status} ${r.statusText}`
         try {
-          const errorJson = JSON.parse(errorText)
-          alert(errorJson.error || 'Purchase failed')
-        } catch {
-          alert(`Purchase failed: ${r.status} ${r.statusText}`)
-        }
+          const errorText = await r.text()
+          if (errorText) {
+            try {
+              const errorJson = JSON.parse(errorText)
+              errorMsg = errorJson.error || errorMsg
+            } catch {
+              errorMsg = errorText || errorMsg
+            }
+          }
+        } catch {}
+        alert(errorMsg)
         return
       }
       
@@ -784,8 +812,34 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
     
     // Increment round number
     setCurrentRound(prev => prev + 1)
-    // Credit points balance
-    setPoints(p => p + totalPoints)
+    
+    // Credit points balance - update server first, then update local state
+    if (user && totalPoints !== 0) {
+      try {
+        const r = await fetch('/api/users/grant', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: user.id, amount: totalPoints })
+        })
+        const j = await r.json()
+        if (j?.ok && j?.bankPoints !== undefined) {
+          setPoints(j.bankPoints)
+          try {
+            localStorage.setItem('flipflop-points', String(j.bankPoints))
+          } catch {}
+        } else {
+          // Fallback: update local state if server update fails
+          setPoints(p => p + totalPoints)
+        }
+      } catch (e) {
+        console.error('Failed to credit points to server:', e)
+        // Fallback: update local state if server update fails
+        setPoints(p => p + totalPoints)
+      }
+    } else {
+      // No user or no points to credit, just update local state
+      setPoints(p => p + totalPoints)
+    }
 
     snapshotGlobalHighlights()
     if (roundResults.length > 0) {
