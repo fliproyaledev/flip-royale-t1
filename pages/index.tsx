@@ -1,6 +1,8 @@
 import { useEffect, useState, useMemo } from 'react'
 import type { SyntheticEvent } from 'react'
 import { TOKENS, Token, getTokenById } from '../lib/tokens'
+import ThemeToggle from '../components/ThemeToggle'
+import { useTheme } from '../lib/theme'
 
 type RoundPick = { tokenId:string; dir:'UP'|'DOWN'; duplicateIndex:number; locked:boolean; pLock?:number; pointsLocked?:number }
 
@@ -92,6 +94,7 @@ function calcPoints(p0:number, pNow:number, dir:'UP'|'DOWN', dup:number, boostLe
 }
 
 export default function Home(){
+  const { theme } = useTheme()
   const [now, setNow] = useState(Date.now())
   const [inventory, setInventory] = useState<Record<string,number>>({})
   const [active, setActive] = useState<RoundPick[]>([])
@@ -1250,7 +1253,8 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
           <a className="tab" href="/history">HISTORY</a>
           {user && <a className="tab" href="/profile">PROFILE</a>}
         </nav>
-        <div style={{display: 'flex', alignItems: 'center', gap: 16}}>
+        <div style={{display: 'flex', alignItems: 'center', gap: 12, marginLeft: 'auto'}}>
+          <ThemeToggle />
           <a 
             href="https://x.com/fliproyale" 
             target="_blank" 
@@ -1259,23 +1263,27 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              width: 36,
-              height: 36,
-              borderRadius: '50%',
-              background: 'rgba(255,255,255,0.08)',
-              border: '1px solid rgba(255,255,255,0.15)',
-              color: 'white',
+              width: 48,
+              height: 48,
+              borderRadius: 12,
+              background: theme === 'light' ? 'rgba(10,44,33,0.1)' : 'rgba(255,255,255,0.1)',
+              border: `1px solid ${theme === 'light' ? 'rgba(10,44,33,0.2)' : 'rgba(255,255,255,0.2)'}`,
+              color: theme === 'light' ? '#0a2c21' : 'white',
               textDecoration: 'none',
               transition: 'all 0.3s',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              backdropFilter: 'blur(10px)',
+              boxShadow: theme === 'light' ? '0 2px 8px rgba(0,0,0,0.05)' : '0 2px 8px rgba(0,0,0,0.1)'
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.15)'
-              e.currentTarget.style.transform = 'scale(1.1)'
+              e.currentTarget.style.background = theme === 'light' ? 'rgba(10,44,33,0.15)' : 'rgba(255,255,255,0.15)'
+              e.currentTarget.style.transform = 'scale(1.05)'
+              e.currentTarget.style.boxShadow = theme === 'light' ? '0 4px 12px rgba(0,0,0,0.1)' : '0 4px 12px rgba(0,0,0,0.15)'
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.08)'
+              e.currentTarget.style.background = theme === 'light' ? 'rgba(10,44,33,0.1)' : 'rgba(255,255,255,0.1)'
               e.currentTarget.style.transform = 'scale(1)'
+              e.currentTarget.style.boxShadow = theme === 'light' ? '0 2px 8px rgba(0,0,0,0.05)' : '0 2px 8px rgba(0,0,0,0.1)'
             }}
             title="Follow us on X"
           >
@@ -1283,103 +1291,75 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
               <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
             </svg>
           </a>
-           {/* Daily free/opened pack removed in beta */}
-           
-                       {user ? (
-             <div style={{display: 'flex', alignItems: 'center', gap: 12, flexDirection: 'column'}}>
-               <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
-                 <div style={{
-                   width: 44,
-                   height: 44,
-                   borderRadius: '50%',
-                   overflow: 'hidden',
-                   border: '2px solid rgba(255,255,255,0.25)',
-                   boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
-                   background: 'rgba(255,255,255,0.1)',
-                   display: 'flex',
-                   alignItems: 'center',
-                   justifyContent: 'center'
-                 }}>
-                   <img
-                     src={user.avatar || DEFAULT_AVATAR}
-                     alt={user.username}
-                     style={{width: '100%', height: '100%', objectFit: 'cover'}}
-                     onError={(e) => {
-                       (e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR
-                     }}
-                   />
-                 </div>
-                 
-                 <div style={{
-                   background: 'rgba(0,207,163,0.15)',
-                   border: '1px solid rgba(0,207,163,0.25)',
-                   borderRadius: 10,
-                   padding: '6px 12px',
-                   fontSize: 15,
-                   fontWeight: 700,
-                   color: '#86efac',
-                   textShadow: '0 1px 2px rgba(0,0,0,0.3)',
-                   minWidth: 100,
-                   textAlign: 'center'
-                 }}>
-                   {points.toLocaleString()} pts
-                 </div>
-               </div>
+          
+          {user ? (
+            <>
+              <div style={{
+                width: 44,
+                height: 44,
+                borderRadius: '50%',
+                overflow: 'hidden',
+                border: '2px solid rgba(255,255,255,0.25)',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+                background: 'rgba(255,255,255,0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <img
+                  src={user.avatar || DEFAULT_AVATAR}
+                  alt={user.username}
+                  style={{width: '100%', height: '100%', objectFit: 'cover'}}
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR
+                  }}
+                />
+              </div>
+              
+              <div style={{
+                background: theme === 'light' ? 'rgba(0,207,163,0.25)' : 'rgba(0,207,163,0.15)',
+                border: `1px solid ${theme === 'light' ? 'rgba(0,207,163,0.4)' : 'rgba(0,207,163,0.25)'}`,
+                borderRadius: 10,
+                padding: '8px 14px',
+                fontSize: 15,
+                fontWeight: 700,
+                color: theme === 'light' ? '#059669' : '#86efac',
+                textShadow: theme === 'light' ? 'none' : '0 1px 2px rgba(0,0,0,0.3)',
+                whiteSpace: 'nowrap'
+              }}>
+                {points.toLocaleString()} pts
+              </div>
               
               <button
                 onClick={handleLogout}
-                 style={{
-                   background: 'rgba(239,68,68,0.2)',
-                   border: '1px solid rgba(239,68,68,0.3)',
-                   color: '#fca5a5',
-                   padding: '6px 12px',
-                   borderRadius: 8,
-                   fontSize: 13,
-                   fontWeight: 600,
-                   cursor: 'pointer',
-                   transition: 'all 0.3s'
-                 }}
-                 onMouseEnter={(e) => {
-                   e.currentTarget.style.background = 'rgba(239,68,68,0.3)'
-                 }}
-                 onMouseLeave={(e) => {
-                   e.currentTarget.style.background = 'rgba(239,68,68,0.2)'
-                 }}
-               >
-                 Logout
-               </button>
-             </div>
-           ) : (
-             <button
-               onClick={() => window.location.href = '/auth'}
-               style={{
-                 background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                 border: 'none',
-                 color: 'white',
-                 padding: '10px 20px',
-                 borderRadius: 10,
-                 fontSize: 16,
-                 fontWeight: 700,
-                 cursor: 'pointer',
-                 transition: 'all 0.3s',
-                 boxShadow: '0 4px 15px rgba(0,0,0,0.2)'
-               }}
-               onMouseEnter={(e) => {
-                 e.currentTarget.style.transform = 'translateY(-2px)'
-                 e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.3)'
-               }}
-               onMouseLeave={(e) => {
-                 e.currentTarget.style.transform = 'translateY(0)'
-                 e.currentTarget.style.boxShadow = '0 4px 15px rgba(0,0,0,0.2)'
-               }}
-             >
-               Login / Sign Up
-             </button>
-           )}
-         </div>
+                style={{
+                  background: theme === 'light' ? 'rgba(239,68,68,0.25)' : 'rgba(239,68,68,0.2)',
+                  border: `1px solid ${theme === 'light' ? 'rgba(239,68,68,0.4)' : 'rgba(239,68,68,0.3)'}`,
+                  color: theme === 'light' ? '#dc2626' : '#fca5a5',
+                  padding: '8px 16px',
+                  borderRadius: 10,
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.3s',
+                  whiteSpace: 'nowrap'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = theme === 'light' ? 'rgba(239,68,68,0.35)' : 'rgba(239,68,68,0.3)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = theme === 'light' ? 'rgba(239,68,68,0.25)' : 'rgba(239,68,68,0.2)'
+                }}
+              >
+                Logout
+              </button>
+            </>
+          ) : null}
+        </div>
       </header>
 
-      <div style={{display:'grid', gridTemplateColumns:'250px 1fr 280px', gap:16, alignItems:'start'}}>
+      <div style={{display:'grid', gridTemplateColumns:'minmax(220px, 250px) 1fr minmax(260px, 300px)', gap:16, alignItems:'start', width:'100%'}}>
         {/* Left Sidebar: Common Pack */}
         <div className="panel" style={{padding:12, position:'sticky', top:16, alignSelf:'start', background:'linear-gradient(180deg, rgba(0,0,0,.35), rgba(0,0,0,.28))'}}>
           <div style={{textAlign:'center', marginBottom:6}}>
