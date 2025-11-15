@@ -341,6 +341,18 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.id, cost, packType: 'mystery' })
       })
+      
+      if (!r.ok) {
+        const errorText = await r.text()
+        try {
+          const errorJson = JSON.parse(errorText)
+          alert(errorJson.error || 'Purchase failed')
+        } catch {
+          alert(`Purchase failed: ${r.status} ${r.statusText}`)
+        }
+        return
+      }
+      
       const j = await r.json()
       if (!j.ok) {
         alert(j.error || 'Purchase failed')
@@ -358,7 +370,8 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
       const cards: string[] = Array.from({length: totalCards}, ()=> TOKENS[randInt(TOKENS.length)].id)
       setShowMysteryResults({open:true, cards})
     } catch (e: any) {
-      alert(e?.message || 'Purchase failed')
+      console.error('Purchase error:', e)
+      alert(e?.message || 'Purchase failed. Please try again.')
     }
   }
 
@@ -1071,16 +1084,6 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
               Boost ends in: {formatRemaining(boost.endAt! - now)}
             </span>
           )}
-          <div style={{marginLeft: 'auto', display:'flex', alignItems:'center', gap:8}}>
-            <span style={{
-              background: 'linear-gradient(135deg,#22c55e,#84cc16)',
-              color: '#052e16',
-              padding: '6px 10px',
-              borderRadius: 10,
-              fontWeight: 900,
-              border: '1px solid rgba(255,255,255,0.2)'
-            }}>POINTS: {points}</span>
-          </div>
         </div>
         <div className="sep"></div>
 
