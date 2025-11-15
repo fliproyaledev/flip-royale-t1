@@ -1,0 +1,1626 @@
+import { useEffect, useState } from 'react'
+
+type Token = { id:string; symbol:string; name:string; logo:string; about:string }
+type RoundPick = { tokenId:string; dir:'UP'|'DOWN'; duplicateIndex:number; locked:boolean; pLock?:number }
+type DayResult = { dayKey:string; total:number; items:{ tokenId:string; symbol:string; dir:'UP'|'DOWN'; duplicateIndex:number; points:number }[] }
+
+const TOKENS: Token[] = [
+  { id:'jarvis',  symbol:'JARVIS',  name:'Jarvis AIGENT',      logo:'/token-logos/jarvis-aigent.png',  about:'Jarvis AGENT token in the Virtual ecosystem.'},
+  { id:'virtual', symbol:'VIRTUAL', name:'Virtual Protocol',  logo:'/token-logos/virtual.png', about:'Virtual Protocol native token.'},
+  { id:'ethy',    symbol:'ETHY',    name:'Ethy AI',     logo:'/token-logos/ethy-ai.png',    about:'Virtual ecosystem token.'},
+  { id:'axr',     symbol:'AXR',     name:'Axelrod',      logo:'/token-logos/axelrod.png',     about:'Virtual ecosystem token.'},
+  { id:'wach',    symbol:'WACH',    name:'Wach XBT',     logo:'/token-logos/wachxbt.png',    about:'Virtual ecosystem token.'},
+  { id:'fancy',   symbol:'FANCY',   name:'ArAIstotale',    logo:'/token-logos/araiistotle.png',   about:'Virtual ecosystem token.'},
+  { id:'lily',    symbol:'LILY',    name:'Lily Token',     logo:'/token-logos/lily-turner.png',    about:'Virtual ecosystem token.'},
+  { id:'robot',   symbol:'ROBOT',   name:'Robostack',          logo:'/token-logos/robostack.png',   about:'Agentic robotics token.'},
+  { id:'virgen',  symbol:'VIRGEN',  name:'Virgen',   logo:'/token-logos/virgen.png',  about:'Virtual ecosystem token.'},
+  { id:'bios',    symbol:'BIOS',    name:'BasisOS',     logo:'/token-logos/bios.png',    about:'Virtual ecosystem token.'},
+  { id:'wint',    symbol:'WINT',    name:'Wint Token',     logo:'/token-logos/whaleintel.png',    about:'Virtual ecosystem token.'},
+]
+
+function utcDayKey(d=new Date()){ const y=d.getUTCFullYear(), m=d.getUTCMonth(), day=d.getUTCDate(); return `${y}-${String(m+1).padStart(2,'0')}-${String(day).padStart(2,'0')}` }
+function randInt(n:number){ return Math.floor(Math.random()*n) }
+function makeRandom5(tokens:Token[]){ return Array.from({length:5},()=>tokens[randInt(tokens.length)].id) }
+async function getPrice(tokenId: string) { const r = await fetch(`/api/price?token=${encodeURIComponent(tokenId)}`); return r.json() as Promise<{p0:number; pLive:number; pClose:number; ts:string}> }
+
+function formatRemaining(ms: number): string {
+  if (ms <= 0) return 'Expired'
+  const hours = Math.floor(ms / (1000 * 60 * 60))
+  const minutes = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60))
+  return `${hours}h ${minutes}m`
+}
+
+function nerfFactor(dup:number){ 
+  if(dup<=1) return 1; 
+  if(dup===2) return 0.75; 
+  if(dup===3) return 0.5; 
+  if(dup===4) return 0.25; 
+  if(dup===5) return 0; 
+  return 0; 
+}
+
+function clamp(v:number, lo:number, hi:number){ return Math.max(lo, Math.min(hi, v)) }
+
+function getGradientColor(index: number): string {
+  const colors = [
+    '#8b5cf6', // purple
+    '#ec4899', // pink
+    '#3b82f6', // blue
+    '#10b981', // green
+    '#f59e0b', // orange
+    '#06b6d4', // cyan
+    '#f97316', // orange-red
+    '#ef4444', // red
+    '#8b5cf6', // purple
+    '#ec4899', // pink
+    '#3b82f6'  // blue
+  ]
+  return colors[index % colors.length]
+}
+
+function calcPoints(p0:number, pNow:number, dir:'UP'|'DOWN', dup:number, boostLevel:0|50|100, boostActive:boolean){
+  const pct = ((pNow - p0)/p0)*100; 
+  const signed = dir==='UP'?pct:-pct; 
+  let pts = signed*100;
+  
+  const nerf = nerfFactor(dup);
+  const loss = 2 - nerf; 
+  
+  if(pts >= 0) {
+    pts = pts * nerf;
+  } else {
+    pts = pts * loss;
+  }
+  
+  pts = clamp(pts,-2500,2500);
+  
+  if(boostActive && boostLevel && pts > 0){ 
+    pts *= (boostLevel===100?2:boostLevel===50?1.5:1) 
+  }
+  
+  return Math.round(pts);
+}
+
+export default function Home(){
+  const [now, setNow] = useState(Date.now())
+  const [inventory, setInventory] = useState<Record<string,number>>({})
+  const [active, setActive] = useState<RoundPick[]>([])
+  const [nextRound, setNextRound] = useState<RoundPick[]>([])
+  const [currentPack, setCurrentPack] = useState<{ dayKey:string; cards:string[]; opened:boolean } | null>(null)
+  const [prices, setPrices] = useState<Record<string,{p0:number;pLive:number;pClose:number}>>({})
+  const [reveals, setReveals] = useState([false,false,false,false,false])
+  const [boost, setBoost] = useState<{ level:0|50|100; endAt?:number }>({ level:0 })
+  const [mounted, setMounted] = useState(false)
+  const [user, setUser] = useState<any>(null)
+  const [boostNext, setBoostNext] = useState<0|50|100>(0)
+  const [history, setHistory] = useState<DayResult[]>([])
+  const [showSummary, setShowSummary] = useState<{open:boolean; items:DayResult|null}>({open:false, items:null})
+  const [showPackResults, setShowPackResults] = useState(false)
+  const [modalOpen, setModalOpen] = useState<{open:boolean; type:'select'|'summary'|'pack'}>({open:false, type:'select'})
+  const [modalSearch, setModalSearch] = useState('')
+
+  const boostActive = !!(boost.endAt && boost.endAt > Date.now())
+
+  useEffect(() => {
+    setMounted(true)
+    
+    const savedUser = localStorage.getItem('flipflop-user')
+    if (savedUser) {
+      setUser(JSON.parse(savedUser))
+    }
+  }, [])
+
+  useEffect(()=>{ const id=setInterval(()=>setNow(Date.now()), 4000); return ()=>clearInterval(id) },[])
+
+  // Boost countdown timer
+  useEffect(() => {
+    if (boostActive) {
+      const interval = setInterval(() => setNow(Date.now()), 30000)
+      return () => clearInterval(interval)
+    }
+  }, [boostActive])
+
+  useEffect(()=>{
+    const savedInventory = localStorage.getItem('flipflop-inventory')
+    const savedHistory = localStorage.getItem('flipflop-history')
+    
+    if (savedInventory) {
+      setInventory(JSON.parse(savedInventory))
+    }
+    if (savedHistory) {
+      setHistory(JSON.parse(savedHistory))
+    }
+  },[])
+
+  useEffect(()=>{
+    localStorage.setItem('flipflop-inventory', JSON.stringify(inventory))
+  },[inventory])
+
+  useEffect(()=>{
+    localStorage.setItem('flipflop-history', JSON.stringify(history))
+  },[history])
+
+  // Demo data
+  useEffect(()=>{
+    if (active.length === 0) {
+      setActive([
+        { tokenId: 'jarvis', dir: 'UP', duplicateIndex: 1, locked: false },
+        { tokenId: 'virtual', dir: 'DOWN', duplicateIndex: 2, locked: true, pLock: 1.25 },
+        { tokenId: 'ethy', dir: 'UP', duplicateIndex: 1, locked: false },
+        { tokenId: 'axr', dir: 'DOWN', duplicateIndex: 3, locked: false },
+        { tokenId: 'wach', dir: 'UP', duplicateIndex: 1, locked: false }
+      ])
+    }
+  }, [active.length])
+
+  useEffect(()=>{
+    if (inventory['jarvis'] === undefined) {
+      setInventory({
+        'jarvis': 3,
+        'virtual': 2,
+        'ethy': 1,
+        'axr': 4,
+        'wach': 2,
+        'fancy': 1,
+        'lily': 0,
+        'robot': 1,
+        'virgen': 0,
+        'bios': 1,
+        'wint': 0
+      })
+    }
+  }, [inventory])
+
+  useEffect(()=>{
+    const today = utcDayKey()
+    const savedPack = localStorage.getItem('flipflop-current-pack')
+    
+    if (savedPack) {
+      const packData = JSON.parse(savedPack)
+      if (packData.dayKey === today) {
+        setCurrentPack(packData)
+      } else {
+        // New day, create new pack
+        const newPack = {
+          dayKey: today,
+          cards: makeRandom5(TOKENS),
+          opened: false
+        }
+        setCurrentPack(newPack)
+        localStorage.setItem('flipflop-current-pack', JSON.stringify(newPack))
+      }
+    } else {
+      // First time, create new pack
+      const newPack = {
+        dayKey: today,
+        cards: makeRandom5(TOKENS),
+        opened: false
+      }
+      setCurrentPack(newPack)
+      localStorage.setItem('flipflop-current-pack', JSON.stringify(newPack))
+    }
+  }, [])
+
+  function nextCount(tokenId: string) {
+    return nextRound.filter(p => p.tokenId === tokenId).length
+  }
+
+  function openModal(slotIndex: number) {
+    setModalOpen({open: true, type: 'select'})
+  }
+
+  function closeModal() {
+    setModalOpen({open: false, type: 'select'})
+    setModalSearch('')
+  }
+
+  function addToNextRound(tokenId: string) {
+    // Find first empty slot
+    const slotIndex = nextRound.findIndex(p => !p)
+    if (slotIndex !== -1) {
+      const newNextRound = [...nextRound]
+      newNextRound[slotIndex] = {
+        tokenId,
+        dir: 'UP',
+        duplicateIndex: nextCount(tokenId) + 1,
+        locked: false
+      }
+      setNextRound(newNextRound)
+      closeModal()
+    }
+  }
+
+  function removeFromNextRound(index: number) {
+    const newNextRound = [...nextRound]
+    newNextRound.splice(index, 1)
+    setNextRound(newNextRound)
+  }
+
+  function openPack() {
+    if (currentPack && !currentPack.opened) {
+      const updatedPack = {...currentPack, opened: true}
+      setCurrentPack(updatedPack)
+      localStorage.setItem('flipflop-current-pack', JSON.stringify(updatedPack))
+      setShowPackResults(true)
+    }
+  }
+
+  function addPackToInventory() {
+    if (currentPack && currentPack.opened) {
+      const newInventory = {...inventory}
+      currentPack.cards.forEach(cardId => {
+        newInventory[cardId] = (newInventory[cardId] || 0) + 1
+      })
+      setInventory(newInventory)
+      setShowPackResults(false)
+    }
+  }
+
+  function simulateNewDay() {
+    // Clear current pack
+    localStorage.removeItem('flipflop-current-pack')
+    
+    // Create new pack for "tomorrow"
+    const tomorrow = new Date()
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
+    const tomorrowKey = utcDayKey(tomorrow)
+    
+    const newPack = {
+      dayKey: tomorrowKey,
+      cards: makeRandom5(TOKENS),
+      opened: false
+    }
+    
+    setCurrentPack(newPack)
+    localStorage.setItem('flipflop-current-pack', JSON.stringify(newPack))
+    
+    // Clear next round
+    setNextRound([])
+    
+    alert('New day simulated! Pack refreshed.')
+  }
+
+  const filteredTokens = TOKENS.filter(tok => 
+    tok.symbol.toLowerCase().includes(modalSearch.toLowerCase()) ||
+    tok.name.toLowerCase().includes(modalSearch.toLowerCase())
+  )
+
+  return (
+    <div className="app">
+             <header className="topbar">
+         <div className="brand"><span className="dot"></span> FLIP FLOP <span className="badge">new</span></div>
+         <nav className="tabs">
+           <a className="tab active" href="/">PLAY</a>
+           <a className="tab" href="/inventory">INVENTORY</a>
+           <a className="tab" href="/leaderboard">LEADERBOARD</a>
+           {user && <a className="tab" href="/profile">PROFILE</a>}
+         </nav>
+         <div style={{display: 'flex', alignItems: 'center', gap: 12}}>
+           {/* Today's Pack Button - BULLRUN Style */}
+           <div style={{
+             position: 'relative',
+             display: 'flex',
+             alignItems: 'center',
+             gap: 8
+           }}>
+             <button
+               onClick={openPack}
+               disabled={currentPack?.opened}
+               style={{
+                 width: 80,
+                 height: 80,
+                 borderRadius: '50%',
+                 background: currentPack?.opened 
+                   ? 'linear-gradient(135deg, #6b7280, #9ca3af)' 
+                   : 'linear-gradient(135deg, #f59e0b, #f97316)',
+                 border: '3px solid rgba(255,255,255,0.2)',
+                 color: 'white',
+                 fontSize: 14,
+                 fontWeight: 700,
+                 cursor: currentPack?.opened ? 'not-allowed' : 'pointer',
+                 transition: 'all 0.3s ease',
+                 boxShadow: currentPack?.opened 
+                   ? '0 4px 12px rgba(0,0,0,0.2)' 
+                   : '0 8px 24px rgba(245,158,11,0.4), 0 4px 12px rgba(0,0,0,0.2)',
+                 display: 'flex',
+                 flexDirection: 'column',
+                 alignItems: 'center',
+                 justifyContent: 'center',
+                 gap: 2,
+                 position: 'relative',
+                 overflow: 'hidden'
+               }}
+               onMouseEnter={(e) => {
+                 if (!currentPack?.opened) {
+                   e.currentTarget.style.transform = 'scale(1.05)';
+                   e.currentTarget.style.boxShadow = '0 12px 32px rgba(245,158,11,0.6), 0 6px 16px rgba(0,0,0,0.3)';
+                 }
+               }}
+               onMouseLeave={(e) => {
+                 if (!currentPack?.opened) {
+                   e.currentTarget.style.transform = 'scale(1)';
+                   e.currentTarget.style.boxShadow = '0 8px 24px rgba(245,158,11,0.4), 0 4px 12px rgba(0,0,0,0.2)';
+                 }
+               }}
+             >
+               {/* Card stack icon */}
+               <div style={{
+                 fontSize: 20,
+                 marginBottom: 2
+               }}>
+                 🃏
+               </div>
+               <div style={{
+                 fontSize: 12,
+                 fontWeight: 800
+               }}>
+                 {currentPack?.opened ? 'OPENED' : 'OPEN'}
+               </div>
+               
+               {/* Glow effect */}
+               {!currentPack?.opened && (
+                 <div style={{
+                   position: 'absolute',
+                   top: '50%',
+                   left: '50%',
+                   transform: 'translate(-50%, -50%)',
+                   width: '120%',
+                   height: '120%',
+                   background: 'radial-gradient(circle, rgba(255,255,255,0.2) 0%, transparent 70%)',
+                   borderRadius: '50%',
+                   filter: 'blur(8px)',
+                   animation: 'pulse 2s infinite'
+                 }} />
+               )}
+             </button>
+             
+             {/* Pack status indicator */}
+             <div style={{
+               position: 'absolute',
+               top: -8,
+               right: -8,
+               background: currentPack?.opened ? '#6b7280' : '#10b981',
+               color: 'white',
+               width: 20,
+               height: 20,
+               borderRadius: '50%',
+               display: 'flex',
+               alignItems: 'center',
+               justifyContent: 'center',
+               fontSize: 10,
+               fontWeight: 700,
+               border: '2px solid rgba(255,255,255,0.9)',
+               boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
+             }}>
+               {currentPack?.opened ? '✓' : '!'}
+             </div>
+           </div>
+           
+                       {user ? (
+             <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
+               <div style={{
+                 background: 'rgba(255,255,255,0.15)',
+                 padding: '8px 16px',
+                 borderRadius: 10,
+                 fontSize: 16,
+                 fontWeight: 700,
+                 color: 'white',
+                 textShadow: '0 1px 2px rgba(0,0,0,0.3)'
+               }}>
+                 {user.username}
+               </div>
+               <button
+                 onClick={simulateNewDay}
+                 style={{
+                   background: 'rgba(59,130,246,0.2)',
+                   border: '1px solid rgba(59,130,246,0.3)',
+                   color: '#93c5fd',
+                   padding: '8px 16px',
+                   borderRadius: 10,
+                   fontSize: 12,
+                   fontWeight: 600,
+                   cursor: 'pointer',
+                   transition: 'all 0.3s'
+                 }}
+                 onMouseEnter={(e) => {
+                   e.currentTarget.style.background = 'rgba(59,130,246,0.3)'
+                 }}
+                 onMouseLeave={(e) => {
+                   e.currentTarget.style.background = 'rgba(59,130,246,0.2)'
+                 }}
+               >
+                 Test UTC 00:00
+               </button>
+               <button
+                 onClick={() => {
+                   localStorage.removeItem('flipflop-user')
+                   setUser(null)
+                 }}
+                 style={{
+                   background: 'rgba(239,68,68,0.2)',
+                   border: '1px solid rgba(239,68,68,0.3)',
+                   color: '#fca5a5',
+                   padding: '8px 16px',
+                   borderRadius: 10,
+                   fontSize: 14,
+                   fontWeight: 600,
+                   cursor: 'pointer',
+                   transition: 'all 0.3s'
+                 }}
+                 onMouseEnter={(e) => {
+                   e.currentTarget.style.background = 'rgba(239,68,68,0.3)'
+                 }}
+                 onMouseLeave={(e) => {
+                   e.currentTarget.style.background = 'rgba(239,68,68,0.2)'
+                 }}
+               >
+                 Logout
+               </button>
+             </div>
+           ) : (
+             <button
+               onClick={() => window.location.href = '/auth'}
+               style={{
+                 background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                 border: 'none',
+                 color: 'white',
+                 padding: '10px 20px',
+                 borderRadius: 10,
+                 fontSize: 16,
+                 fontWeight: 700,
+                 cursor: 'pointer',
+                 transition: 'all 0.3s',
+                 boxShadow: '0 4px 15px rgba(0,0,0,0.2)'
+               }}
+               onMouseEnter={(e) => {
+                 e.currentTarget.style.transform = 'translateY(-2px)'
+                 e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.3)'
+               }}
+               onMouseLeave={(e) => {
+                 e.currentTarget.style.transform = 'translateY(0)'
+                 e.currentTarget.style.boxShadow = '0 4px 15px rgba(0,0,0,0.2)'
+               }}
+             >
+               Login / Sign Up
+             </button>
+           )}
+         </div>
+       </header>
+
+      {/* Active Round */}
+      <div className="panel">
+        <div className="row">
+          <h2>Active Round</h2>
+          {mounted && boostActive && (
+            <span className="badge" style={{
+              background: 'rgba(0,207,163,.2)',
+              borderColor: 'rgba(0,207,163,.3)',
+              color: '#86efac',
+              fontSize: 12
+            }}>
+              Boost ends in: {formatRemaining(boost.endAt! - now)}
+            </span>
+          )}
+        </div>
+        <div className="sep"></div>
+        
+        <div className="picks">
+          {active.map((p, index) => {
+            const tok = TOKENS.find(t => t.id === p.tokenId)!
+            const price = prices[p.tokenId]
+            const points = price ? calcPoints(price.p0, price.pLive, p.dir, p.duplicateIndex, boost.level, boostActive) : 0
+            
+            return (
+                             <div key={index} style={{
+                 background: `linear-gradient(135deg, ${getGradientColor(index)}, ${getGradientColor(index + 1)})`,
+                 borderRadius: 20,
+                 padding: 24,
+                 position: 'relative',
+                 minHeight: 280,
+                 display: 'flex',
+                 flexDirection: 'column',
+                 justifyContent: 'space-between',
+                 border: '2px solid rgba(255,255,255,0.15)',
+                 boxShadow: '0 12px 40px rgba(0,0,0,0.15), 0 4px 20px rgba(0,0,0,0.1)',
+                 transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+                 transform: 'translateY(0)',
+                 cursor: 'pointer'
+               }}
+               onMouseEnter={(e) => {
+                 e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)';
+                 e.currentTarget.style.boxShadow = '0 20px 60px rgba(0,0,0,0.25), 0 8px 30px rgba(0,0,0,0.15)';
+                 e.currentTarget.style.border = '2px solid rgba(255,255,255,0.3)';
+               }}
+               onMouseLeave={(e) => {
+                 e.currentTarget.style.transform = 'translateY(0)';
+                 e.currentTarget.style.boxShadow = '0 12px 40px rgba(0,0,0,0.15), 0 4px 20px rgba(0,0,0,0.1)';
+                 e.currentTarget.style.border = '2px solid rgba(255,255,255,0.15)';
+               }}>
+                 
+                 {/* Lock badge */}
+                 {p.locked && (
+                   <div style={{
+                     position: 'absolute',
+                     top: 12,
+                     right: 12,
+                     background: '#fbbf24',
+                     color: '#000',
+                     width: 24,
+                     height: 24,
+                     borderRadius: '50%',
+                     display: 'flex',
+                     alignItems: 'center',
+                     justifyContent: 'center',
+                     fontSize: 12,
+                     fontWeight: 700,
+                     boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
+                   }}>
+                     🔒
+                   </div>
+                 )}
+                 
+                 {/* Duplicate badge */}
+                 {p.duplicateIndex > 1 && (
+                   <div style={{
+                     position: 'absolute',
+                     top: 12,
+                     left: 12,
+                     background: 'rgba(0,0,0,0.7)',
+                     color: 'white',
+                     padding: '4px 8px',
+                     borderRadius: 6,
+                     fontSize: 11,
+                     border: '1px solid rgba(255,255,255,0.3)',
+                     fontWeight: 600
+                   }}>
+                     dup x{p.duplicateIndex}
+                   </div>
+                 )}
+                 
+                 {/* Token logo */}
+                 <div style={{
+                   display: 'flex',
+                   justifyContent: 'center',
+                   alignItems: 'center',
+                   flex: 1,
+                   marginTop: 16
+                 }}>
+                   <div style={{
+                     width: 120,
+                     height: 120,
+                     background: 'rgba(255,255,255,0.12)',
+                     borderRadius: '50%',
+                     display: 'flex',
+                     alignItems: 'center',
+                     justifyContent: 'center',
+                     border: '3px solid rgba(255,255,255,0.25)',
+                     boxShadow: '0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)',
+                     backdropFilter: 'blur(15px)',
+                     position: 'relative',
+                     overflow: 'hidden'
+                   }}>
+                     {/* Glow effect */}
+                     <div style={{
+                       position: 'absolute',
+                       top: '50%',
+                       left: '50%',
+                       transform: 'translate(-50%, -50%)',
+                       width: '120%',
+                       height: '120%',
+                       background: 'radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%)',
+                       borderRadius: '50%',
+                       filter: 'blur(20px)'
+                     }} />
+                     
+                     <img 
+                       src={tok.logo} 
+                       alt={tok.symbol} 
+                       style={{
+                         width: 100,
+                         height: 100,
+                         borderRadius: '50%',
+                         objectFit: 'cover',
+                         filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.4))',
+                         position: 'relative',
+                         zIndex: 2,
+                         border: '2px solid rgba(255,255,255,0.2)'
+                       }}
+                       onError={(e) => {
+                         // Fallback to letter if image fails to load
+                         const target = e.target as HTMLImageElement;
+                         target.style.display = 'none';
+                         const parent = target.parentElement;
+                         if (parent) {
+                           parent.innerHTML = `<div style="font-size: 40px; font-weight: 900; color: white; text-shadow: 0 2px 8px rgba(0,0,0,0.4); position: relative; z-index: 2;">${tok.symbol.charAt(0)}</div>`;
+                         }
+                       }}
+                     />
+                   </div>
+                 </div>
+                 
+                 {/* Token info and controls */}
+                 <div style={{textAlign: 'center', marginTop: 16}}>
+                   <div style={{
+                     fontSize: 18,
+                     fontWeight: 900,
+                     color: 'white',
+                     textShadow: '0 2px 4px rgba(0,0,0,0.3)',
+                     marginBottom: 4
+                   }}>
+                     {tok.symbol}
+                   </div>
+                   <div style={{
+                     fontSize: 12,
+                     color: 'rgba(255,255,255,0.8)',
+                     marginBottom: 8
+                   }}>
+                     {tok.about}
+                   </div>
+                   
+                   {/* UP/DOWN buttons */}
+                   <div style={{display: 'flex', gap: 8, marginBottom: 8, justifyContent: 'center'}}>
+                     <button className={`btn ${p.dir==='UP'?'btn-up active':''}`} style={{fontSize: 11, padding: '4px 8px', fontWeight: 600}}>
+                       ▲ UP
+                     </button>
+                     <button className={`btn ${p.dir==='DOWN'?'btn-down active':''}`} style={{fontSize: 11, padding: '4px 8px', fontWeight: 600}}>
+                       ▼ DOWN
+                     </button>
+                   </div>
+                   
+                   {/* Lock button */}
+                   <button className="btn" style={{fontSize: 11, padding: '4px 8px', marginBottom: 8, fontWeight: 600}}>
+                     {p.locked ? '🔒 Locked' : 'Lock'}
+                   </button>
+                   
+                   {/* Live Points */}
+                   <div style={{
+                     background: 'rgba(0,0,0,0.2)',
+                     color: 'white',
+                     padding: '6px 12px',
+                     borderRadius: 8,
+                     fontSize: 12,
+                     fontWeight: 600,
+                     marginBottom: 4
+                   }}>
+                     Live Points: {points > 0 ? '+' : ''}{points}
+                   </div>
+                   
+                   {/* Applied Boost/Nerf */}
+                   {p.duplicateIndex > 1 && (
+                     <div style={{
+                       background: 'rgba(0,0,0,0.2)',
+                       color: 'white',
+                       padding: '4px 8px',
+                       borderRadius: 6,
+                       fontSize: 10,
+                       fontWeight: 600
+                     }}>
+                       Applied: Boost x{boostActive && boost.level ? (boost.level === 100 ? 2 : 1.5) : 1}
+                     </div>
+                   )}
+                 </div>
+               </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Next Round */}
+      <div className="panel">
+        <h2>Next Round</h2>
+        <div className="sep"></div>
+        
+                 <div className="picks">
+           {Array.from({ length: 5 }, (_, index) => {
+             const p = nextRound[index]
+             
+             if (p) {
+               const tok = TOKENS.find(t => t.id === p.tokenId)!
+               
+               return (
+                 <div key={index} style={{
+                   background: `linear-gradient(135deg, ${getGradientColor(index)}, ${getGradientColor(index + 1)})`,
+                   borderRadius: 20,
+                   padding: 24,
+                   position: 'relative',
+                   minHeight: 320,
+                   display: 'flex',
+                   flexDirection: 'column',
+                   justifyContent: 'space-between',
+                   border: '1px solid rgba(255,255,255,0.2)',
+                   boxShadow: '0 12px 32px rgba(0,0,0,0.3)',
+                   cursor: 'pointer'
+                 }}>
+                   
+                   {/* Duplicate badge */}
+                   {p.duplicateIndex > 1 && (
+                     <div style={{
+                       position: 'absolute',
+                       top: 12,
+                       left: 12,
+                       background: 'rgba(0,0,0,0.7)',
+                       color: 'white',
+                       padding: '4px 8px',
+                       borderRadius: 6,
+                       fontSize: 11,
+                       border: '1px solid rgba(255,255,255,0.3)',
+                       fontWeight: 600
+                     }}>
+                       dup x{p.duplicateIndex}
+                     </div>
+                   )}
+                   
+                   <div style={{
+                     width: 140,
+                     height: 140,
+                     borderRadius: '50%',
+                     background: 'rgba(255,255,255,0.15)',
+                     display: 'flex',
+                     alignItems: 'center',
+                     justifyContent: 'center',
+                     margin: '0 auto 20px',
+                     border: '4px solid rgba(255,255,255,0.25)',
+                     boxShadow: '0 12px 32px rgba(0,0,0,0.3)'
+                   }}>
+                     <img
+                       src={tok.logo}
+                       alt={tok.symbol}
+                       style={{
+                         width: 120,
+                         height: 120,
+                         borderRadius: '50%',
+                         objectFit: 'cover'
+                       }}
+                       onError={(e) => {
+                         const target = e.target as HTMLImageElement;
+                         target.style.display = 'none';
+                         target.nextElementSibling!.textContent = tok.symbol.charAt(0);
+                       }}
+                     />
+                     <div style={{
+                       width: 120,
+                       height: 120,
+                       borderRadius: '50%',
+                       background: 'rgba(255,255,255,0.1)',
+                       display: 'flex',
+                       alignItems: 'center',
+                       justifyContent: 'center',
+                       fontSize: 48,
+                       fontWeight: 900,
+                       color: 'white',
+                       textShadow: '0 2px 4px rgba(0,0,0,0.5)'
+                     }}></div>
+                   </div>
+                   
+                   <div style={{textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between'}}>
+                     <div>
+                       <div style={{fontSize: 22, fontWeight: 800, color: 'white', marginBottom: 6, textShadow: '0 2px 4px rgba(0,0,0,0.5)'}}>
+                         {tok.symbol}
+                       </div>
+                       <div style={{fontSize: 13, color: 'rgba(255,255,255,0.9)', marginBottom: 16, lineHeight: 1.4}}>
+                         {tok.about}
+                       </div>
+                     </div>
+                     
+                     <div style={{marginBottom: 16}}>
+                       <div style={{display: 'flex', gap: 10, marginBottom: 12, justifyContent: 'center'}}>
+                         <button 
+                           className={`btn ${p.dir==='UP'?'btn-up active':''}`} 
+                           style={{fontSize: 13, padding: '8px 16px', fontWeight: 600}}
+                           onClick={() => {
+                             const newNextRound = [...nextRound]
+                             newNextRound[index].dir = 'UP'
+                             setNextRound(newNextRound)
+                           }}
+                         >
+                           ▲ UP
+                         </button>
+                         <button 
+                           className={`btn ${p.dir==='DOWN'?'btn-down active':''}`} 
+                           style={{fontSize: 13, padding: '8px 16px', fontWeight: 600}}
+                           onClick={() => {
+                             const newNextRound = [...nextRound]
+                             newNextRound[index].dir = 'DOWN'
+                             setNextRound(newNextRound)
+                           }}
+                         >
+                           ▼ DOWN
+                         </button>
+                       </div>
+                       
+                       <button 
+                         className="btn" 
+                         style={{fontSize: 13, padding: '8px 16px', fontWeight: 600}}
+                         onClick={() => removeFromNextRound(index)}
+                       >
+                         Remove
+                       </button>
+                     </div>
+                   </div>
+                 </div>
+               )
+             } else {
+               // Empty slot
+               return (
+                 <div key={index} style={{
+                   border: '2px dashed rgba(255,255,255,0.3)',
+                   background: 'rgba(255,255,255,0.05)',
+                   borderRadius: 20,
+                   padding: 24,
+                   cursor: 'pointer',
+                   display: 'flex',
+                   flexDirection: 'column',
+                   alignItems: 'center',
+                   justifyContent: 'center',
+                   gap: 12,
+                   minHeight: 280,
+                   transition: 'all 0.3s ease'
+                 }}
+                 onClick={() => setModalOpen({open: true, type: 'select'})}
+                 onMouseEnter={(e) => {
+                   e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
+                   e.currentTarget.style.border = '2px dashed rgba(255,255,255,0.5)';
+                 }}
+                 onMouseLeave={(e) => {
+                   e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+                   e.currentTarget.style.border = '2px dashed rgba(255,255,255,0.3)';
+                 }}>
+                   <div style={{
+                     width: 60,
+                     height: 60,
+                     borderRadius: '50%',
+                     background: 'rgba(255,255,255,0.1)',
+                     display: 'flex',
+                     alignItems: 'center',
+                     justifyContent: 'center',
+                     fontSize: 24,
+                     color: 'white',
+                     border: '2px solid rgba(255,255,255,0.2)'
+                   }}>
+                     +
+                   </div>
+                   <div style={{
+                     fontSize: 16,
+                     fontWeight: 700,
+                     color: 'white',
+                     textAlign: 'center'
+                   }}>
+                     Add Card
+                   </div>
+                   <div style={{
+                     fontSize: 12,
+                     color: 'rgba(255,255,255,0.7)',
+                     textAlign: 'center'
+                   }}>
+                     Select from inventory
+                   </div>
+                 </div>
+               )
+             }
+           })}
+         </div>
+       </div>
+
+       {/* Previous Rounds */}
+       <div className="panel">
+         <h2>Previous Rounds</h2>
+         <div className="sep"></div>
+         
+         {/* Beta Round 345 */}
+         <div style={{
+           background: 'rgba(255,255,255,0.05)',
+           borderRadius: 16,
+           padding: 20,
+           marginBottom: 16,
+           border: '1px solid rgba(255,255,255,0.1)'
+         }}>
+           <div style={{
+             display: 'flex',
+             justifyContent: 'space-between',
+             alignItems: 'center',
+             marginBottom: 16
+           }}>
+             <div style={{
+               fontSize: 18,
+               fontWeight: 700,
+               color: 'white'
+             }}>
+               Beta round 345
+             </div>
+             <div style={{
+               fontSize: 14,
+               color: 'rgba(255,255,255,0.7)'
+             }}>
+               Ended Aug 28, 2025
+             </div>
+           </div>
+           
+           {/* Empty hand placeholder */}
+           <div style={{
+             display: 'flex',
+             justifyContent: 'center',
+             gap: 8,
+             marginBottom: 16
+           }}>
+             {Array.from({ length: 5 }, (_, i) => (
+               <div key={i} style={{
+                 width: 40,
+                 height: 56,
+                 background: 'rgba(255,255,255,0.1)',
+                 borderRadius: 8,
+                 border: '2px dashed rgba(255,255,255,0.3)'
+               }} />
+             ))}
+           </div>
+           <div style={{
+             textAlign: 'center',
+             color: 'rgba(255,255,255,0.6)',
+             fontSize: 14,
+             marginBottom: 16
+           }}>
+             No hand played
+           </div>
+           
+           {/* Leaderboard */}
+           <div style={{
+             background: 'rgba(0,0,0,0.3)',
+             borderRadius: 12,
+             overflow: 'hidden'
+           }}>
+             <div style={{
+               display: 'grid',
+               gridTemplateColumns: '80px 1fr 200px',
+               gap: 16,
+               padding: '12px 16px',
+               background: 'rgba(255,255,255,0.1)',
+               fontSize: 14,
+               fontWeight: 600,
+               color: 'white'
+             }}>
+               <div>Rank</div>
+               <div>Player / Points</div>
+               <div>Hand</div>
+             </div>
+             
+             {/* Top 3 players */}
+             {history.length > 0 ? (
+               history.slice(0, 3).map((round, index) => {
+                 const topPlayer = round.items[0] // Assuming first item is top player
+                 return (
+                   <div key={index} style={{
+                     display: 'grid',
+                     gridTemplateColumns: '80px 1fr 200px',
+                     gap: 16,
+                     padding: '12px 16px',
+                     borderBottom: index < 2 ? '1px solid rgba(255,255,255,0.1)' : 'none',
+                     background: index === 0 ? 'rgba(255,215,0,0.1)' : 'transparent'
+                   }}>
+                     <div style={{
+                       fontSize: 16,
+                       fontWeight: 700,
+                       color: index === 0 ? '#ffd700' : 'white'
+                     }}>
+                       #{index + 1}
+                     </div>
+                     <div style={{
+                       fontSize: 14,
+                       color: 'white'
+                     }}>
+                       <div style={{ fontWeight: 600, marginBottom: 2 }}>Player {index + 1}</div>
+                       <div style={{ 
+                         color: '#10b981', 
+                         fontSize: 12,
+                         fontWeight: 500 
+                       }}>
+                         +{round.total} pts {round.dayKey}
+                       </div>
+                     </div>
+                     <div style={{
+                       display: 'flex',
+                       gap: 4
+                     }}>
+                       {round.items.slice(0, 5).map((item, cardIndex) => {
+                         const tok = TOKENS.find(t => t.id === item.tokenId)!
+                         return (
+                           <div key={cardIndex} style={{
+                             width: 32,
+                             height: 44,
+                             background: `linear-gradient(135deg, ${getGradientColor(cardIndex)}, ${getGradientColor(cardIndex + 1)})`,
+                             borderRadius: 6,
+                             display: 'flex',
+                             alignItems: 'center',
+                             justifyContent: 'center',
+                             border: '1px solid rgba(255,255,255,0.2)',
+                             boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
+                           }}>
+                             <img
+                               src={tok.logo}
+                               alt={tok.symbol}
+                               style={{
+                                 width: 24,
+                                 height: 24,
+                                 borderRadius: '50%',
+                                 objectFit: 'cover'
+                               }}
+                               onError={(e) => {
+                                 const target = e.target as HTMLImageElement;
+                                 target.style.display = 'none';
+                                 target.nextElementSibling!.textContent = tok.symbol.charAt(0);
+                               }}
+                             />
+                             <div style={{
+                               width: 24,
+                               height: 24,
+                               borderRadius: '50%',
+                               background: 'rgba(255,255,255,0.1)',
+                               display: 'flex',
+                               alignItems: 'center',
+                               justifyContent: 'center',
+                               fontSize: 12,
+                               fontWeight: 900,
+                               color: 'white'
+                             }}></div>
+                           </div>
+                         )
+                       })}
+                     </div>
+                   </div>
+                 )
+               })
+             ) : (
+               // Demo data when no history
+               [
+                 { rank: 1, name: 'alarms', points: 1355, time: '15:52:10', hand: ['jarvis', 'virtual', 'ethy', 'axr', 'wach'] },
+                 { rank: 2, name: 'birches', points: 1355, time: '15:52:10', hand: ['jarvis', 'virtual', 'ethy', 'axr', 'wach'] },
+                 { rank: 3, name: 'gusher', points: 1355, time: '15:52:11', hand: ['jarvis', 'virtual', 'ethy', 'axr', 'wach'] }
+               ].map((player, index) => (
+               <div key={index} style={{
+                 display: 'grid',
+                 gridTemplateColumns: '80px 1fr 200px',
+                 gap: 16,
+                 padding: '12px 16px',
+                 borderBottom: index < 2 ? '1px solid rgba(255,255,255,0.1)' : 'none',
+                 background: index === 0 ? 'rgba(255,215,0,0.1)' : 'transparent'
+               }}>
+                 <div style={{
+                   fontSize: 16,
+                   fontWeight: 700,
+                   color: index === 0 ? '#ffd700' : 'white'
+                 }}>
+                   #{player.rank}
+                 </div>
+                 <div style={{
+                   fontSize: 14,
+                   color: 'white'
+                 }}>
+                   <div style={{ fontWeight: 600, marginBottom: 2 }}>{player.name}</div>
+                   <div style={{ 
+                     color: '#10b981', 
+                     fontSize: 12,
+                     fontWeight: 500 
+                   }}>
+                     +{player.points} pts {player.time}
+                   </div>
+                 </div>
+                 <div style={{
+                   display: 'flex',
+                   gap: 4
+                 }}>
+                   {player.hand.map((tokenId, cardIndex) => {
+                     const tok = TOKENS.find(t => t.id === tokenId)!
+                     return (
+                       <div key={cardIndex} style={{
+                         width: 32,
+                         height: 44,
+                         background: `linear-gradient(135deg, ${getGradientColor(cardIndex)}, ${getGradientColor(cardIndex + 1)})`,
+                         borderRadius: 6,
+                         display: 'flex',
+                         alignItems: 'center',
+                         justifyContent: 'center',
+                         border: '1px solid rgba(255,255,255,0.2)',
+                         boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
+                       }}>
+                         <img
+                           src={tok.logo}
+                           alt={tok.symbol}
+                           style={{
+                             width: 24,
+                             height: 24,
+                             borderRadius: '50%',
+                             objectFit: 'cover'
+                           }}
+                           onError={(e) => {
+                             const target = e.target as HTMLImageElement;
+                             target.style.display = 'none';
+                             target.nextElementSibling!.textContent = tok.symbol.charAt(0);
+                           }}
+                         />
+                         <div style={{
+                           width: 24,
+                           height: 24,
+                           borderRadius: '50%',
+                           background: 'rgba(255,255,255,0.1)',
+                           display: 'flex',
+                           alignItems: 'center',
+                           justifyContent: 'center',
+                           fontSize: 12,
+                           fontWeight: 900,
+                           color: 'white'
+                         }}></div>
+                       </div>
+                     )
+                   })}
+                 </div>
+               </div>
+             ))}
+             
+             <div style={{
+               padding: '8px 16px',
+               fontSize: 12,
+               color: 'rgba(255,255,255,0.6)',
+               textAlign: 'center',
+               background: 'rgba(0,0,0,0.2)'
+             }}>
+               of 16,513
+             </div>
+           </div>
+         </div>
+         
+         {/* Beta Round 344 */}
+         <div style={{
+           background: 'rgba(255,255,255,0.05)',
+           borderRadius: 16,
+           padding: 20,
+           border: '1px solid rgba(255,255,255,0.1)'
+         }}>
+           <div style={{
+             display: 'flex',
+             justifyContent: 'space-between',
+             alignItems: 'center',
+             marginBottom: 16
+           }}>
+             <div style={{
+               fontSize: 18,
+               fontWeight: 700,
+               color: 'white'
+             }}>
+               Beta round 344
+             </div>
+             <div style={{
+               fontSize: 14,
+               color: 'rgba(255,255,255,0.7)'
+             }}>
+               Ended Aug 27, 2025
+             </div>
+           </div>
+           
+           {/* Empty hand placeholder */}
+           <div style={{
+             display: 'flex',
+             justifyContent: 'center',
+             gap: 8,
+             marginBottom: 16
+           }}>
+             {Array.from({ length: 5 }, (_, i) => (
+               <div key={i} style={{
+                 width: 40,
+                 height: 56,
+                 background: 'rgba(255,255,255,0.1)',
+                 borderRadius: 8,
+                 border: '2px dashed rgba(255,255,255,0.3)'
+               }} />
+             ))}
+           </div>
+           <div style={{
+             textAlign: 'center',
+             color: 'rgba(255,255,255,0.6)',
+             fontSize: 14,
+             marginBottom: 16
+           }}>
+             No hand played
+           </div>
+           
+           {/* Leaderboard */}
+           <div style={{
+             background: 'rgba(0,0,0,0.3)',
+             borderRadius: 12,
+             overflow: 'hidden'
+           }}>
+             <div style={{
+               display: 'grid',
+               gridTemplateColumns: '80px 1fr 200px',
+               gap: 16,
+               padding: '12px 16px',
+               background: 'rgba(255,255,255,0.1)',
+               fontSize: 14,
+               fontWeight: 600,
+               color: 'white'
+             }}>
+               <div>Rank</div>
+               <div>Player / Points</div>
+               <div>Hand</div>
+             </div>
+             
+             {/* Top 3 players */}
+             {[
+               { rank: 1, name: 'cbvfdzk33', points: 1280, time: '14:23:45', hand: ['fancy', 'lily', 'robot', 'virgen', 'bios'] },
+               { rank: 2, name: 'crypto_king', points: 1245, time: '14:23:46', hand: ['fancy', 'lily', 'robot', 'virgen', 'bios'] },
+               { rank: 3, name: 'token_hunter', points: 1210, time: '14:23:47', hand: ['fancy', 'lily', 'robot', 'virgen', 'bios'] }
+             ].map((player, index) => (
+               <div key={index} style={{
+                 display: 'grid',
+                 gridTemplateColumns: '80px 1fr 200px',
+                 gap: 16,
+                 padding: '12px 16px',
+                 borderBottom: index < 2 ? '1px solid rgba(255,255,255,0.1)' : 'none',
+                 background: index === 0 ? 'rgba(255,215,0,0.1)' : 'transparent'
+               }}>
+                 <div style={{
+                   fontSize: 16,
+                   fontWeight: 700,
+                   color: index === 0 ? '#ffd700' : 'white'
+                 }}>
+                   #{player.rank}
+                 </div>
+                 <div style={{
+                   fontSize: 14,
+                   color: 'white'
+                 }}>
+                   <div style={{ fontWeight: 600, marginBottom: 2 }}>{player.name}</div>
+                   <div style={{ 
+                     color: '#10b981', 
+                     fontSize: 12,
+                     fontWeight: 500 
+                   }}>
+                     +{player.points} pts {player.time}
+                   </div>
+                 </div>
+                 <div style={{
+                   display: 'flex',
+                   gap: 4
+                 }}>
+                   {player.hand.map((tokenId, cardIndex) => {
+                     const tok = TOKENS.find(t => t.id === tokenId)!
+                     return (
+                       <div key={cardIndex} style={{
+                         width: 32,
+                         height: 44,
+                         background: `linear-gradient(135deg, ${getGradientColor(cardIndex + 5)}, ${getGradientColor(cardIndex + 6)})`,
+                         borderRadius: 6,
+                         display: 'flex',
+                         alignItems: 'center',
+                         justifyContent: 'center',
+                         border: '1px solid rgba(255,255,255,0.2)',
+                         boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
+                       }}>
+                         <img
+                           src={tok.logo}
+                           alt={tok.symbol}
+                           style={{
+                             width: 24,
+                             height: 24,
+                             borderRadius: '50%',
+                             objectFit: 'cover'
+                           }}
+                           onError={(e) => {
+                             const target = e.target as HTMLImageElement;
+                             target.style.display = 'none';
+                             target.nextElementSibling!.textContent = tok.symbol.charAt(0);
+                           }}
+                         />
+                         <div style={{
+                           width: 24,
+                           height: 24,
+                           borderRadius: '50%',
+                           background: 'rgba(255,255,255,0.1)',
+                           display: 'flex',
+                           alignItems: 'center',
+                           justifyContent: 'center',
+                           fontSize: 12,
+                           fontWeight: 900,
+                           color: 'white'
+                         }}></div>
+                       </div>
+                     )
+                   })}
+                 </div>
+               </div>
+             ))}
+             
+             <div style={{
+               padding: '8px 16px',
+               fontSize: 12,
+               color: 'rgba(255,255,255,0.6)',
+               textAlign: 'center',
+               background: 'rgba(0,0,0,0.2)'
+             }}>
+               of 15,847
+             </div>
+           </div>
+         </div>
+       </div>
+
+       {/* Select Card Modal */}
+      {modalOpen.open && modalOpen.type === 'select' && (
+        <div className="modal-backdrop" onClick={closeModal}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 style={{color: 'white', fontSize: 20, fontWeight: 700}}>Select a Card</h3>
+              <button onClick={closeModal} style={{background: 'none', border: 'none', color: 'white', fontSize: 20, cursor: 'pointer'}}>×</button>
+            </div>
+            
+            <input
+              type="text"
+              placeholder="Search tokens..."
+              value={modalSearch}
+              onChange={(e) => setModalSearch(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                borderRadius: 8,
+                border: '1px solid rgba(255,255,255,0.2)',
+                background: 'rgba(255,255,255,0.1)',
+                color: 'white',
+                fontSize: 16,
+                marginBottom: 16
+              }}
+            />
+            
+            <div className="modal-grid" style={{maxHeight: '400px', overflowY: 'auto'}}>
+              {filteredTokens.map((tok) => {
+                const count = inventory[tok.id] || 0
+                const used = nextCount(tok.id)
+                const available = count - used
+                
+                return (
+                  <div 
+                    key={tok.id} 
+                    className="modal-card"
+                    style={{
+                      cursor: available > 0 ? 'pointer' : 'not-allowed',
+                      opacity: available > 0 ? 1 : 0.5
+                    }}
+                    onClick={() => available > 0 && addToNextRound(tok.id)}
+                    title={available <= 0 ? 'No copies left today' : ''}
+                  >
+                    <div style={{
+                      width: 80,
+                      height: 80,
+                      borderRadius: '50%',
+                      background: 'rgba(255,255,255,0.1)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      border: '2px solid rgba(255,255,255,0.2)',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                      marginBottom: 12,
+                      position: 'relative',
+                      overflow: 'hidden'
+                    }}>
+                      <img
+                        src={tok.logo}
+                        alt={tok.symbol}
+                        style={{
+                          width: 70,
+                          height: 70,
+                          borderRadius: '50%',
+                          objectFit: 'cover',
+                          position: 'relative',
+                          zIndex: 2
+                        }}
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          const parent = target.parentElement;
+                          if (parent) {
+                            parent.innerHTML = `<div style="width: 70px; height: 70px; border-radius: 50%; background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 900; color: white; text-shadow: 0 2px 4px rgba(0,0,0,0.5); position: relative; z-index: 2;">${tok.symbol.charAt(0)}</div>`;
+                          }
+                        }}
+                      />
+                      <div style={{
+                        width: 70,
+                        height: 70,
+                        borderRadius: '50%',
+                        background: 'rgba(255,255,255,0.1)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 28,
+                        fontWeight: 900,
+                        color: 'white',
+                        textShadow: '0 2px 4px rgba(0,0,0,0.5)',
+                        position: 'absolute',
+                        top: '50%',
+                        left: '50%',
+                        transform: 'translate(-50%, -50%)',
+                        zIndex: 1
+                      }}></div>
+                    </div>
+                    
+                    <div style={{fontSize: 14, fontWeight: 700, color: 'white', marginBottom: 4}}>
+                      {tok.symbol}
+                    </div>
+                    
+                    <div style={{
+                      fontSize: 12,
+                      color: available > 0 ? '#86efac' : '#fca5a5',
+                      fontWeight: 600
+                    }}>
+                      Left for next: {available}
+                    </div>
+                    
+                    <button 
+                      className="btn" 
+                      style={{fontSize: 12, padding: '6px 12px', marginTop: 8}}
+                      disabled={available <= 0}
+                    >
+                      Use
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pack Results Modal */}
+      {showPackResults && currentPack && (
+        <div className="modal-backdrop" onClick={() => setShowPackResults(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 style={{color: 'white', fontSize: 20, fontWeight: 700}}>Pack Results</h3>
+              <button onClick={() => setShowPackResults(false)} style={{background: 'none', border: 'none', color: 'white', fontSize: 20, cursor: 'pointer'}}>×</button>
+            </div>
+            
+            <div style={{display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16, marginBottom: 20}}>
+              {currentPack.cards.map((cardId, index) => {
+                const tok = TOKENS.find(t => t.id === cardId)!
+                
+                return (
+                  <div key={index} style={{
+                    background: `linear-gradient(135deg, ${getGradientColor(index)}, ${getGradientColor(index + 1)})`,
+                    borderRadius: 20,
+                    padding: 24,
+                    position: 'relative',
+                    minHeight: 280,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    border: '2px solid rgba(255,255,255,0.15)',
+                    boxShadow: '0 12px 40px rgba(0,0,0,0.15), 0 4px 20px rgba(0,0,0,0.1)',
+                    transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+                    transform: 'translateY(0)',
+                    cursor: 'pointer'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)';
+                    e.currentTarget.style.boxShadow = '0 20px 60px rgba(0,0,0,0.25), 0 8px 30px rgba(0,0,0,0.15)';
+                    e.currentTarget.style.border = '2px solid rgba(255,255,255,0.3)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 12px 40px rgba(0,0,0,0.15), 0 4px 20px rgba(0,0,0,0.1)';
+                    e.currentTarget.style.border = '2px solid rgba(255,255,255,0.15)';
+                  }}>
+                    <div style={{
+                      position: 'absolute',
+                      top: 12,
+                      right: 12,
+                      background: '#fbbf24',
+                      color: '#000',
+                      padding: '4px 8px',
+                      borderRadius: 6,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
+                    }}>
+                      New Card!
+                    </div>
+                    
+                    {/* Token logo */}
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      flex: 1,
+                      marginTop: 16
+                    }}>
+                      <div style={{
+                        width: 120,
+                        height: 120,
+                        background: 'rgba(255,255,255,0.12)',
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        border: '3px solid rgba(255,255,255,0.25)',
+                        boxShadow: '0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)',
+                        backdropFilter: 'blur(15px)',
+                        position: 'relative',
+                        overflow: 'hidden'
+                      }}>
+                        {/* Glow effect */}
+                        <div style={{
+                          position: 'absolute',
+                          top: '50%',
+                          left: '50%',
+                          transform: 'translate(-50%, -50%)',
+                          width: '120%',
+                          height: '120%',
+                          background: 'radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%)',
+                          borderRadius: '50%',
+                          filter: 'blur(20px)'
+                        }} />
+                        
+                        <img 
+                          src={tok.logo} 
+                          alt={tok.symbol} 
+                          style={{
+                            width: 100,
+                            height: 100,
+                            borderRadius: '50%',
+                            objectFit: 'cover',
+                            filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.4))',
+                            position: 'relative',
+                            zIndex: 2,
+                            border: '2px solid rgba(255,255,255,0.2)'
+                          }}
+                          onError={(e) => {
+                            // Fallback to letter if image fails to load
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none';
+                            const parent = target.parentElement;
+                            if (parent) {
+                              parent.innerHTML = `<div style="font-size: 40px; font-weight: 900; color: white; text-shadow: 0 2px 8px rgba(0,0,0,0.4); position: relative; z-index: 2;">${tok.symbol.charAt(0)}</div>`;
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+                    
+                    {/* Token info */}
+                    <div style={{textAlign: 'center', marginTop: 16}}>
+                      <div style={{
+                        fontSize: 18,
+                        fontWeight: 900,
+                        color: 'white',
+                        textShadow: '0 2px 4px rgba(0,0,0,0.3)',
+                        marginBottom: 4
+                      }}>
+                        {tok.symbol}
+                      </div>
+                      <div style={{
+                        fontSize: 12,
+                        color: 'rgba(255,255,255,0.8)',
+                        marginBottom: 8
+                      }}>
+                        {tok.name}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            
+            <div style={{textAlign: 'center'}}>
+              <button 
+                className="btn primary big" 
+                onClick={addPackToInventory}
+                style={{marginRight: 12}}
+              >
+                Add to Inventory
+              </button>
+              <button 
+                className="btn" 
+                onClick={() => setShowPackResults(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

@@ -1,0 +1,336 @@
+import { useEffect, useMemo, useState } from 'react'
+
+const DEFAULT_AVATAR = '/avatars/default-avatar.png'
+
+type LeaderboardEntry = {
+  rank: number
+  username: string
+  totalPoints: number
+  roundsPlayed: number
+  bestRound: number
+  isCurrentUser: boolean
+  avatar?: string
+}
+
+// Demo data
+const DEMO_LEADERBOARD: LeaderboardEntry[] = [
+  { rank: 1, username: "crypto_whale", totalPoints: 15420, roundsPlayed: 12, bestRound: 2840, isCurrentUser: false, avatar: DEFAULT_AVATAR },
+  { rank: 2, username: "flip_master", totalPoints: 12850, roundsPlayed: 15, bestRound: 1950, isCurrentUser: false, avatar: DEFAULT_AVATAR },
+  { rank: 3, username: "virtual_trader", totalPoints: 11230, roundsPlayed: 10, bestRound: 1680, isCurrentUser: false, avatar: DEFAULT_AVATAR },
+  { rank: 4, username: "ai_predictor", totalPoints: 9870, roundsPlayed: 14, bestRound: 1420, isCurrentUser: false, avatar: DEFAULT_AVATAR },
+  { rank: 5, username: "token_hunter", totalPoints: 8650, roundsPlayed: 11, bestRound: 1350, isCurrentUser: false, avatar: DEFAULT_AVATAR },
+  { rank: 6, username: "flip_flopper", totalPoints: 7430, roundsPlayed: 13, bestRound: 1180, isCurrentUser: true, avatar: DEFAULT_AVATAR },
+  { rank: 7, username: "crypto_ninja", totalPoints: 6540, roundsPlayed: 9, bestRound: 980, isCurrentUser: false, avatar: DEFAULT_AVATAR },
+  { rank: 8, username: "virtual_agent", totalPoints: 5870, roundsPlayed: 12, bestRound: 890, isCurrentUser: false, avatar: DEFAULT_AVATAR },
+  { rank: 9, username: "prediction_pro", totalPoints: 5230, roundsPlayed: 8, bestRound: 750, isCurrentUser: false, avatar: DEFAULT_AVATAR },
+  { rank: 10, username: "flip_champion", totalPoints: 4890, roundsPlayed: 10, bestRound: 680, isCurrentUser: false, avatar: DEFAULT_AVATAR },
+]
+
+export default function Leaderboard(){
+  const [timeUntilReset, setTimeUntilReset] = useState('')
+  const [mounted, setMounted] = useState(false)
+  const [user, setUser] = useState<any>(null)
+  const [points, setPoints] = useState(0)
+
+  const leaderboard = useMemo(() => {
+    const base = DEMO_LEADERBOARD.map(entry => ({ ...entry, isCurrentUser: false }))
+    if (!user) {
+      return DEMO_LEADERBOARD
+    }
+
+    let found = false
+    const updated = base.map(entry => {
+      if (entry.username.toLowerCase() === String(user.username || '').toLowerCase()) {
+        found = true
+        return { ...entry, isCurrentUser: true, totalPoints: points, avatar: user.avatar || DEFAULT_AVATAR }
+      }
+      return entry
+    })
+
+    if (!found) {
+      updated.push({
+        rank: updated.length + 1,
+        username: user.username,
+        totalPoints: points,
+        roundsPlayed: 0,
+        bestRound: 0,
+        isCurrentUser: true,
+        avatar: user.avatar || DEFAULT_AVATAR
+      })
+    }
+
+    return updated.map((entry, idx) => ({ ...entry, rank: idx + 1 }))
+  }, [user, points])
+
+  useEffect(() => {
+    setMounted(true)
+    
+    // Check if user is logged in (optional)
+    const savedUser = localStorage.getItem('flipflop-user')
+    if (savedUser) {
+      const parsed = JSON.parse(savedUser)
+      if (!parsed.avatar) {
+        parsed.avatar = DEFAULT_AVATAR
+        try { localStorage.setItem('flipflop-user', JSON.stringify(parsed)) } catch {}
+      }
+      setUser(parsed)
+    }
+    const savedPoints = localStorage.getItem('flipflop-points')
+    if (savedPoints) {
+      setPoints(parseInt(savedPoints, 10) || 0)
+    }
+  }, [])
+
+  useEffect(()=>{
+    function updateTimer(){
+      // Calculate time until next Monday 00:00 UTC
+      const now = new Date()
+      const daysUntilMonday = (8 - now.getUTCDay()) % 7
+      const nextMonday = new Date(now)
+      nextMonday.setUTCDate(now.getUTCDate() + daysUntilMonday)
+      nextMonday.setUTCHours(0, 0, 0, 0)
+      
+      const diff = nextMonday.getTime() - now.getTime()
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+      
+      setTimeUntilReset(`${days}d ${hours}h ${minutes}m`)
+    }
+    
+    updateTimer()
+    const interval = setInterval(updateTimer, 60000) // Update every minute
+    return () => clearInterval(interval)
+  },[])
+
+  function getRankIcon(rank: number): string {
+    switch(rank) {
+      case 1: return '🥇'
+      case 2: return '🥈'
+      case 3: return '🥉'
+      default: return `#${rank}`
+    }
+  }
+
+  function getRowStyle(entry: LeaderboardEntry) {
+    const baseStyle = {
+      padding: '16px 20px',
+      borderBottom: '1px solid rgba(255,255,255,.08)',
+      display: 'grid',
+      gridTemplateColumns: '80px 1fr 120px 120px 120px 80px',
+      alignItems: 'center',
+      gap: 16,
+      transition: 'background-color 0.2s'
+    }
+
+    if (entry.rank <= 3) {
+      return {
+        ...baseStyle,
+        background: entry.rank === 1 ? 'linear-gradient(90deg, rgba(255,215,0,.1), rgba(255,215,0,.05))' :
+                   entry.rank === 2 ? 'linear-gradient(90deg, rgba(192,192,192,.1), rgba(192,192,192,.05))' :
+                   'linear-gradient(90deg, rgba(205,127,50,.1), rgba(205,127,50,.05))',
+        borderLeft: `4px solid ${
+          entry.rank === 1 ? '#ffd700' : 
+          entry.rank === 2 ? '#c0c0c0' : 
+          '#cd7f32'
+        }`
+      }
+    }
+
+    if (entry.isCurrentUser) {
+      return {
+        ...baseStyle,
+        background: 'rgba(0,207,163,.1)',
+        borderLeft: '4px solid #00cfa3'
+      }
+    }
+
+    return baseStyle
+  }
+
+  return (
+    <div className="app">
+      <header className="topbar">
+        <div className="brand">
+          <img src="/logo.png" alt="FLIP ROYALE" className="logo" onError={(e) => {
+            const target = e.currentTarget as HTMLImageElement
+            target.src = '/logo.svg'
+            target.onerror = () => {
+              target.style.display = 'none'
+              const parent = target.parentElement
+              if (parent) parent.innerHTML = '<span class="dot"></span> FLIP ROYALE'
+            }
+          }} />
+        </div>
+        <nav className="tabs">
+          <a className="tab" href="/">PLAY</a>
+          <a className="tab" href="/prices">PRICES</a>
+          <a className="tab" href="/arena">ARENA</a>
+          <a className="tab" href="/guide">GUIDE</a>
+          <a className="tab" href="/inventory">INVENTORY</a>
+          <a className="tab active" href="/leaderboard">LEADERBOARD</a>
+          <a className="tab" href="/history">HISTORY</a>
+          {user && <a className="tab" href="/profile">PROFILE</a>}
+        </nav>
+        <div className="muted">Weekly • Global</div>
+      </header>
+
+      <div className="panel">
+        <div className="row">
+          <h2>Weekly Leaderboard</h2>
+          <div style={{display:'flex',alignItems:'center',gap:12}}>
+            <span className="badge" style={{
+              background:'rgba(0,207,163,.2)',
+              borderColor:'rgba(0,207,163,.3)',
+              color:'#86efac',
+              fontSize:12
+            }}>
+              Weekly reset in: {mounted ? timeUntilReset : '...'}
+            </span>
+          </div>
+        </div>
+        <div className="sep"></div>
+        
+        <div style={{
+          overflowX: 'auto',
+          borderRadius: 8,
+          border: '1px solid var(--border)',
+          background: 'rgba(0,0,0,.1)'
+        }}>
+          {/* Table Header */}
+          <div style={{
+            padding: '16px 20px',
+            background: 'rgba(0,0,0,.2)',
+            borderBottom: '1px solid var(--border)',
+            display: 'grid',
+            gridTemplateColumns: '80px 1fr 120px 120px 120px 80px',
+            alignItems: 'center',
+            gap: 16,
+            fontWeight: 700,
+            fontSize: 14,
+            color: 'var(--muted-inv)'
+          }}>
+            <div>Rank</div>
+            <div>Player</div>
+            <div>Total Points</div>
+            <div>Rounds</div>
+            <div>Best Round</div>
+            <div></div>
+          </div>
+          
+          {/* Table Rows */}
+          {leaderboard.map((entry) => (
+            <div key={entry.rank} style={getRowStyle(entry)}>
+              <div style={{
+                fontSize: entry.rank <= 3 ? 20 : 16,
+                fontWeight: 900,
+                color: entry.rank <= 3 ? '#ffd700' : 'var(--text-inv)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8
+              }}>
+                {getRankIcon(entry.rank)}
+              </div>
+              
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                fontWeight: 600
+              }}>
+                <div style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: '50%',
+                  overflow: 'hidden',
+                  border: '2px solid rgba(255,255,255,0.15)',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.25)'
+                }}>
+                  <img
+                    src={entry.avatar || DEFAULT_AVATAR}
+                    alt={`${entry.username} avatar`}
+                    style={{width:'100%', height:'100%', objectFit:'cover'}}
+                    onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR }}
+                  />
+                </div>
+                <span style={{color: 'var(--text-inv)'}}>{entry.username}</span>
+                {entry.isCurrentUser && (
+                  <span className="badge" style={{
+                    background: 'rgba(0,207,163,.2)',
+                    borderColor: 'rgba(0,207,163,.3)',
+                    color: '#86efac',
+                    fontSize: 10,
+                    padding: '2px 6px'
+                  }}>
+                    you
+                  </span>
+                )}
+              </div>
+              
+              <div style={{
+                fontWeight: 700,
+                color: entry.totalPoints >= 0 ? '#86efac' : '#fca5a5'
+              }}>
+                {entry.totalPoints >= 0 ? '+' : ''}{entry.totalPoints.toLocaleString()}
+              </div>
+              
+              <div style={{color: 'var(--muted-inv)', fontSize: 14}}>
+                {entry.roundsPlayed}
+              </div>
+              
+              <div style={{
+                fontWeight: 600,
+                color: entry.bestRound >= 0 ? '#86efac' : '#fca5a5',
+                fontSize: 14
+              }}>
+                {entry.bestRound >= 0 ? '+' : ''}{entry.bestRound}
+              </div>
+              
+              <div style={{textAlign: 'right'}}>
+                {entry.rank <= 3 && (
+                  <span style={{
+                    fontSize: 12,
+                    color: entry.rank === 1 ? '#ffd700' : 
+                           entry.rank === 2 ? '#c0c0c0' : '#cd7f32',
+                    fontWeight: 700
+                  }}>
+                    {entry.rank === 1 ? 'GOLD' : 
+                     entry.rank === 2 ? 'SILVER' : 'BRONZE'}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        
+        <div style={{
+          marginTop: 20,
+          padding: '16px',
+          background: 'rgba(0,0,0,.1)',
+          borderRadius: 8,
+          border: '1px solid var(--border)'
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            marginBottom: 8
+          }}>
+            <div style={{
+              width: 12,
+              height: 12,
+              borderRadius: '50%',
+              background: '#00cfa3'
+            }}></div>
+            <span style={{fontSize: 14, color: 'var(--muted-inv)'}}>
+              Your current position: #{leaderboard.find(e => e.isCurrentUser)?.rank ?? '—'}
+            </span>
+          </div>
+          <div style={{fontSize: 12, color: 'var(--muted-inv)'}}>
+            Leaderboard resets every Monday at 00:00 UTC. Keep playing to climb the ranks!
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
