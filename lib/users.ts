@@ -1,0 +1,151 @@
+import fs from 'fs'
+import path from 'path'
+import { loadUsersKV, saveUsersKV } from './kv'
+
+export type LogEntry = {
+  date: string // ISO date (YYYY-MM-DD)
+  type: 'daily' | 'duel' | 'system'
+  dailyDelta?: number
+  bonusGranted?: number
+  note?: string
+}
+
+export type UserRecord = {
+  id: string
+  name?: string
+  avatar?: string
+  totalPoints: number // leaderboard points (never decreased)
+  bankPoints: number  // spendable points for Arena (not counted to leaderboard)
+  logs: LogEntry[]
+  updatedAt: string
+}
+
+const DATA_DIR = path.join(process.cwd(), 'data')
+const USERS_FILE = path.join(DATA_DIR, 'users.json')
+
+function ensureDir() {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true })
+  }
+}
+
+// Try KV first, fallback to JSON file for backward compatibility
+export async function loadUsers(): Promise<Record<string, UserRecord>> {
+  try {
+    // Try KV (Vercel production)
+    const kvData = await loadUsersKV()
+    if (Object.keys(kvData).length > 0) {
+      return kvData as Record<string, UserRecord>
+    }
+  } catch (err) {
+    console.warn('KV load failed, trying JSON fallback:', err)
+  }
+
+  // Fallback to JSON file (local dev or migration period)
+  try {
+    ensureDir()
+    if (!fs.existsSync(USERS_FILE)) return {}
+    const raw = fs.readFileSync(USERS_FILE, 'utf8')
+    const json = JSON.parse(raw)
+    if (json && typeof json === 'object') {
+      // Migrate to KV if KV is available
+      try {
+        await saveUsersKV(json)
+      } catch {}
+      return json as Record<string, UserRecord>
+    }
+    return {}
+  } catch {
+    return {}
+  }
+}
+
+export async function saveUsers(map: Record<string, UserRecord>): Promise<void> {
+  try {
+    // Save to KV (Vercel production)
+    await saveUsersKV(map)
+  } catch (err) {
+    console.warn('KV save failed, trying JSON fallback:', err)
+  }
+
+  // Also save to JSON file for backup/local dev
+  try {
+    ensureDir()
+    fs.writeFileSync(USERS_FILE, JSON.stringify(map, null, 2), 'utf8')
+  } catch (err) {
+    console.warn('JSON save failed:', err)
+  }
+}
+
+export function getOrCreateUser(map: Record<string, UserRecord>, userId: string): UserRecord {
+  let user = map[userId]
+  if (!user) {
+    user = {
+      id: userId,
+      totalPoints: 0,
+      bankPoints: 0,
+      logs: [],
+      updatedAt: new Date().toISOString()
+    }
+    map[userId] = user
+  }
+  return user
+}
+
+// Sync version for backward compatibility (loads from KV internally)
+export function loadUsersSync(): Record<string, UserRecord> {
+  // This is a fallback - should use async loadUsers() in API routes
+  try {
+    ensureDir()
+    if (!fs.existsSync(USERS_FILE)) return {}
+    const raw = fs.readFileSync(USERS_FILE, 'utf8')
+    const json = JSON.parse(raw)
+    return json && typeof json === 'object' ? json as Record<string, UserRecord> : {}
+  } catch {
+    return {}
+  }
+}
+
+export function saveUsersSync(map: Record<string, UserRecord>): void {
+  // This is a fallback - should use async saveUsers() in API routes
+  ensureDir()
+  fs.writeFileSync(USERS_FILE, JSON.stringify(map, null, 2), 'utf8')
+  // Also try async KV save (fire and forget)
+  saveUsersKV(map).catch(() => {})
+}
+
+export function applyDailyDelta(user: UserRecord, dateIso: string, delta: number, note?: string) {
+  if (delta > 0) {
+    user.totalPoints += delta
+    // Also credit spendable balance so points are usable in both modes
+    user.bankPoints += delta
+  }
+  user.logs.push({ type: 'daily', date: dateIso.slice(0, 10), dailyDelta: delta, note })
+  user.updatedAt = new Date().toISOString()
+}
+
+export function grantDailyBonus(user: UserRecord, dateIso: string, bonus: number, note?: string) {
+  if (bonus > 0) {
+    user.totalPoints += bonus
+    // Mirror to spendable balance for unified points
+    user.bankPoints += bonus
+    user.logs.push({ type: 'daily', date: dateIso.slice(0, 10), dailyDelta: 0, bonusGranted: bonus, note })
+    user.updatedAt = new Date().toISOString()
+  }
+}
+
+export function creditBank(user: UserRecord, amount: number, note?: string, dateIso?: string) {
+  if (!Number.isFinite(amount)) return
+  user.bankPoints += amount
+  user.logs.push({ type: 'system', date: (dateIso || new Date().toISOString().slice(0,10)), bonusGranted: amount, note })
+  user.updatedAt = new Date().toISOString()
+}
+
+export function debitBank(user: UserRecord, amount: number, note?: string, dateIso?: string) {
+  if (!Number.isFinite(amount)) return
+  user.bankPoints = Math.max(0, user.bankPoints - amount)
+  user.logs.push({ type: 'system', date: (dateIso || new Date().toISOString().slice(0,10)), dailyDelta: 0, note })
+  user.updatedAt = new Date().toISOString()
+}
+
+
