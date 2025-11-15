@@ -19,7 +19,23 @@ const memoryStore = new Map<string, string>()
 
 async function getKV(key: string): Promise<string | null> {
   try {
-    // Check if KV is configured and available
+    // Check if REST API is configured (Vercel KV or Upstash)
+    if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
+      // Upstash/Vercel KV REST API format: POST with command array
+      const response = await fetch(process.env.KV_REST_API_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.KV_REST_API_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(['GET', key])
+      })
+      if (!response.ok) throw new Error(`KV REST API error: ${response.status}`)
+      const data = await response.json()
+      // Upstash returns { result: value }, Vercel KV might return value directly
+      return data.result !== undefined ? data.result : (data || null)
+    }
+    // Fallback: Try native KV if KV_URL is available
     if (process.env.KV_URL && kv) {
       return await kv.get(key)
     }
@@ -33,6 +49,21 @@ async function getKV(key: string): Promise<string | null> {
 
 async function setKV(key: string, value: string): Promise<void> {
   try {
+    // Check if REST API is configured (Vercel KV or Upstash)
+    if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
+      // Upstash/Vercel KV REST API format: POST with command array
+      const response = await fetch(process.env.KV_REST_API_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.KV_REST_API_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(['SET', key, value])
+      })
+      if (!response.ok) throw new Error(`KV REST API error: ${response.status}`)
+      return
+    }
+    // Fallback: Try native KV if KV_URL is available
     if (process.env.KV_URL && kv) {
       await kv.set(key, value)
       return
@@ -47,6 +78,21 @@ async function setKV(key: string, value: string): Promise<void> {
 
 async function delKV(key: string): Promise<void> {
   try {
+    // Check if REST API is configured (Vercel KV or Upstash)
+    if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
+      // Upstash/Vercel KV REST API format: POST with command array
+      const response = await fetch(process.env.KV_REST_API_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.KV_REST_API_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(['DEL', key])
+      })
+      if (!response.ok) throw new Error(`KV REST API error: ${response.status}`)
+      return
+    }
+    // Fallback: Try native KV if KV_URL is available
     if (process.env.KV_URL && kv) {
       await kv.del(key)
       return
