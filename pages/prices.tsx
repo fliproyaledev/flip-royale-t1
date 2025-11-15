@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { SyntheticEvent } from 'react'
 import { jsonTokens, buildDexscreenerViewUrl } from '../lib/tokens'
+import ThemeToggle from '../components/ThemeToggle'
 
 type PriceRow = {
   tokenId: string
@@ -155,7 +156,17 @@ export default function PricesPage() {
   return (
     <div className="app">
       <header className="topbar">
-        <div className="brand"><span className="dot"></span> FLIP ROYALE</div>
+        <div className="brand">
+          <img src="/logo.png" alt="FLIP ROYALE" className="logo" onError={(e) => {
+            const target = e.currentTarget as HTMLImageElement
+            target.src = '/logo.svg'
+            target.onerror = () => {
+              target.style.display = 'none'
+              const parent = target.parentElement
+              if (parent) parent.innerHTML = '<span class="dot"></span> FLIP ROYALE'
+            }
+          }} />
+        </div>
         <nav className="tabs">
           <a className="tab" href="/">PLAY</a>
           <a className="tab active" href="/prices">PRICES</a>
@@ -166,8 +177,8 @@ export default function PricesPage() {
           <a className="tab" href="/history">HISTORY</a>
           {user && <a className="tab" href="/profile">PROFILE</a>}
         </nav>
-        <div style={{display: 'flex', alignItems: 'center', gap: 16}}>
-          <div className="muted">Live market snapshot</div>
+        <div style={{display: 'flex', alignItems: 'center', gap: 12, marginLeft: 'auto'}}>
+          <ThemeToggle />
           <a 
             href="https://x.com/fliproyale" 
             target="_blank" 
@@ -176,23 +187,27 @@ export default function PricesPage() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              width: 36,
-              height: 36,
-              borderRadius: '50%',
-              background: 'rgba(255,255,255,0.08)',
-              border: '1px solid rgba(255,255,255,0.15)',
+              width: 48,
+              height: 48,
+              borderRadius: 12,
+              background: 'rgba(255,255,255,0.1)',
+              border: '1px solid rgba(255,255,255,0.2)',
               color: 'white',
               textDecoration: 'none',
               transition: 'all 0.3s',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              backdropFilter: 'blur(10px)',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.background = 'rgba(255,255,255,0.15)'
-              e.currentTarget.style.transform = 'scale(1.1)'
+              e.currentTarget.style.transform = 'scale(1.05)'
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)'
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.08)'
+              e.currentTarget.style.background = 'rgba(255,255,255,0.1)'
               e.currentTarget.style.transform = 'scale(1)'
+              e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)'
             }}
             title="Follow us on X"
           >
