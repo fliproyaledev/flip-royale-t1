@@ -698,18 +698,12 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
     }
   }, [active, stateLoaded])
   
-  // CRITICAL: Save nextRound to localStorage whenever it changes
-  // But only after initial load is complete to avoid overwriting loaded data
-  useEffect(() => { 
-    if (!stateLoaded || !nextRoundLoaded) return
-    try { 
-      const serialized = JSON.stringify(nextRound)
-      localStorage.setItem('flipflop-next', serialized)
-      console.log('💾 Saved nextRound to localStorage:', nextRound)
-    } catch (e) {
-      console.error('Failed to save nextRound:', e)
-    }
-  }, [nextRound, stateLoaded, nextRoundLoaded])
+  // Note: nextRound is now saved manually via "Save Picks" button
+  // This useEffect is kept for debugging but doesn't auto-save
+  // useEffect(() => { 
+  //   if (!stateLoaded || !nextRoundLoaded) return
+  //   // Auto-save disabled - user must click "Save Picks" button
+  // }, [nextRound, stateLoaded, nextRoundLoaded])
   useEffect(() => { // Combined state for compatibility
     if (!stateLoaded || !inventoryLoaded) return
     try {
@@ -752,7 +746,8 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
         locked: false
       }
       setNextRound(newNextRound)
-      try { localStorage.setItem('flipflop-next', JSON.stringify(newNextRound)) } catch {}
+      setNextRoundLoaded(true)
+      // Note: User must click "Save Picks" to persist changes
       closeModal()
     } else {
       alert('All slots are filled! Remove a card first.')
@@ -763,7 +758,22 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
     const newNextRound = [...nextRound]
     newNextRound[index] = null
     setNextRound(newNextRound)
-    try { localStorage.setItem('flipflop-next', JSON.stringify(newNextRound)) } catch {}
+    setNextRoundLoaded(true)
+    // Note: User must click "Save Picks" to persist changes
+  }
+
+  function saveNextRoundPicks() {
+    try {
+      const serialized = JSON.stringify(nextRound)
+      localStorage.setItem('flipflop-next', serialized)
+      setNextRoundLoaded(true)
+      console.log('✅ Saved nextRound picks to localStorage:', nextRound)
+      // Show success feedback
+      alert('Picks saved successfully! Your selections are now saved.')
+    } catch (e) {
+      console.error('Failed to save nextRound picks:', e)
+      alert('Failed to save picks. Please try again.')
+    }
   }
 
   function toggleLock(index: number) {
@@ -1528,10 +1538,7 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
                              newNextRound[index].dir = 'UP'
                              setNextRound(newNextRound)
                              setNextRoundLoaded(true)
-                             try { 
-                               localStorage.setItem('flipflop-next', JSON.stringify(newNextRound))
-                               console.log('💾 Saved nextRound after dir change to UP:', newNextRound)
-                             } catch {}
+                             // Note: User must click "Save Picks" to persist changes
                            }}
                          >
                            ▲ UP
@@ -1544,10 +1551,7 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
                              newNextRound[index].dir = 'DOWN'
                              setNextRound(newNextRound)
                              setNextRoundLoaded(true)
-                             try { 
-                               localStorage.setItem('flipflop-next', JSON.stringify(newNextRound))
-                               console.log('💾 Saved nextRound after dir change to DOWN:', newNextRound)
-                             } catch {}
+                             // Note: User must click "Save Picks" to persist changes
                            }}
                          >
                            ▼ DOWN
@@ -1624,6 +1628,57 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
                )
              }
           })}
+        </div>
+        
+        {/* Save Picks Button */}
+        <div style={{
+          marginTop: 24,
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          gap: 12
+        }}>
+          <button
+            onClick={saveNextRoundPicks}
+            className="btn"
+            style={{
+              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              border: '2px solid rgba(16, 185, 129, 0.5)',
+              color: 'white',
+              fontSize: 16,
+              fontWeight: 700,
+              padding: '14px 32px',
+              borderRadius: 12,
+              cursor: 'pointer',
+              boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2)',
+              transition: 'all 0.3s ease',
+              textTransform: 'uppercase',
+              letterSpacing: 1.2,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'linear-gradient(135deg, #059669 0%, #047857 100%)'
+              e.currentTarget.style.transform = 'translateY(-2px)'
+              e.currentTarget.style.boxShadow = '0 6px 20px rgba(16, 185, 129, 0.5), 0 4px 12px rgba(0, 0, 0, 0.3)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+              e.currentTarget.style.transform = 'translateY(0)'
+              e.currentTarget.style.boxShadow = '0 4px 14px rgba(16, 185, 129, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2)'
+            }}
+          >
+            <span>💾</span>
+            <span>Save Picks</span>
+          </button>
+          <div style={{
+            fontSize: 12,
+            color: 'rgba(255, 255, 255, 0.7)',
+            fontStyle: 'italic'
+          }}>
+            Click to save your selections
+          </div>
         </div>
       </div>
 
