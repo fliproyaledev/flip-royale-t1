@@ -750,12 +750,19 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
     }
   }, [active, stateLoaded])
   
-  // Note: nextRound is now saved manually via "Save Picks" button
-  // This useEffect is kept for debugging but doesn't auto-save
-  // useEffect(() => { 
-  //   if (!stateLoaded || !nextRoundLoaded) return
-  //   // Auto-save disabled - user must click "Save Picks" button
-  // }, [nextRound, stateLoaded, nextRoundLoaded])
+  // Keep nextRound synchronized with localStorage automatically as a safety net.
+  // Users can still click "Save Picks" for explicit confirmation, but this ensures
+  // background persistence (useful if they forget to save or navigate quickly).
+  useEffect(() => { 
+    if (!stateLoaded || !nextRoundLoaded) return
+    try { 
+      const serialized = JSON.stringify(nextRound)
+      localStorage.setItem('flipflop-next', serialized)
+      console.log('💾 [AUTO] nextRound synced to localStorage:', serialized)
+    } catch (e) {
+      console.error('⚠️ [AUTO] Failed to auto-save nextRound:', e)
+    }
+  }, [nextRound, stateLoaded, nextRoundLoaded])
   useEffect(() => { // Combined state for compatibility
     if (!stateLoaded || !inventoryLoaded) return
     try {
