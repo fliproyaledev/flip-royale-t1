@@ -167,6 +167,8 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
   useEffect(() => {
     setMounted(true)
     
+    let pointsInterval: NodeJS.Timeout | null = null
+    
     const savedUser = localStorage.getItem('flipflop-user')
     if (savedUser) {
       const parsed = JSON.parse(savedUser)
@@ -191,23 +193,16 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
       loadUserPoints()
       
       // Refresh points periodically
-      const pointsInterval = setInterval(() => {
+      pointsInterval = setInterval(() => {
         loadUserPoints()
       }, 30000) // Refresh every 30 seconds
-      
-      // Cleanup interval on unmount
-      return () => clearInterval(pointsInterval)
     } else {
       // Redirect to auth page if no user
       window.location.href = '/auth'
-      return
     }
-    const savedStarter = localStorage.getItem('flipflop-starter-available')
-    if (savedStarter) setStarterAvailable(savedStarter === '1')
-    const savedPts = localStorage.getItem('flipflop-points')
-    if (savedPts) setPoints(parseInt(savedPts))
     
     // CRITICAL: Load nextRound FIRST before any other operations
+    // This MUST run regardless of user state
     // This ensures we never lose the user's selections
     let savedNextRound: RoundPick[] | null = null
     try {
@@ -383,9 +378,51 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
       }
       setStateLoaded(true)
     }
+    
+    // Cleanup function for points interval
+    return () => {
+      if (pointsInterval) {
+        clearInterval(pointsInterval)
+      }
+    }
   }, [])
 
   useEffect(()=>{ const id=setInterval(()=>setNow(Date.now()), 4000); return ()=>clearInterval(id) },[])
+
+  // CRITICAL: Force load nextRound from localStorage IMMEDIATELY on mount
+  // This runs BEFORE stateLoaded check to ensure data is never lost
+  useEffect(() => {
+    console.log('🚀 [FORCE-LOAD] Component mounted, checking localStorage immediately...')
+    
+    const savedNext = localStorage.getItem('flipflop-next')
+    console.log('🚀 [FORCE-LOAD] localStorage check:', savedNext ? 'EXISTS' : 'NOT FOUND')
+    
+    if (savedNext) {
+      try {
+        const parsed = JSON.parse(savedNext)
+        console.log('🚀 [FORCE-LOAD] Parsed data:', parsed)
+        
+        if (Array.isArray(parsed) && parsed.length === 5) {
+          const hasData = parsed.some((p: any) => p !== null && p.tokenId)
+          
+          if (hasData) {
+            console.log('🚀 [FORCE-LOAD] FORCING nextRound restore:', parsed)
+            setNextRound(parsed)
+            setNextRoundLoaded(true)
+            
+            // Check if all picks are filled to mark as saved
+            const hasAllPicks = parsed.every((p: any) => p !== null && p.tokenId)
+            if (hasAllPicks) {
+              setNextRoundSaved(true)
+              console.log('✅ [FORCE-LOAD] Marked as saved (all 5 picks filled)')
+            }
+          }
+        }
+      } catch (e) {
+        console.error('❌ [FORCE-LOAD] Failed:', e)
+      }
+    }
+  }, []) // Run IMMEDIATELY on mount, before anything else
 
   // CRITICAL: Auto-save nextRound to localStorage whenever it changes
   // This ensures data is never lost, even if user forgets to click "Save Picks"
