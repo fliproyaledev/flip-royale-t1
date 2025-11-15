@@ -14,8 +14,9 @@ export type UserRecord = {
   id: string
   name?: string
   avatar?: string
-  totalPoints: number // leaderboard points (never decreased)
-  bankPoints: number  // spendable points for Arena (not counted to leaderboard)
+  totalPoints: number // leaderboard points (never decreased, excludes gift points)
+  bankPoints: number  // spendable points for Arena (includes gift points)
+  giftPoints: number  // initial gift points (not counted in leaderboard)
   logs: LogEntry[]
   updatedAt: string
 }
@@ -84,6 +85,7 @@ export function getOrCreateUser(map: Record<string, UserRecord>, userId: string)
       id: userId,
       totalPoints: 0,
       bankPoints: 0,
+      giftPoints: 0,
       logs: [],
       updatedAt: new Date().toISOString()
     }
