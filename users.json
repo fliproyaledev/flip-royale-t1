@@ -1,0 +1,55 @@
+{
+  "undefined": {
+    "id": "undefined",
+    "totalPoints": 0,
+    "bankPoints": 0,
+    "logs": [],
+    "updatedAt": "2025-11-10T22:31:33.398Z"
+  },
+  "1762813916380": {
+    "id": "1762813916380",
+    "totalPoints": 0,
+    "bankPoints": 97500,
+    "logs": [
+      {
+        "type": "system",
+        "date": "2025-11-10",
+        "bonusGranted": 100000,
+        "note": "admin-grant"
+      },
+      {
+        "type": "system",
+        "date": "2025-11-10",
+        "dailyDelta": 0,
+        "note": "duel-entry-duel_mhtpwbew_oh7sol"
+      },
+      {
+        "type": "system",
+        "date": "2025-11-10",
+        "bonusGranted": 2500,
+        "note": "duel-cancel-refund-duel_mhtpwbew_oh7sol"
+      },
+      {
+        "type": "system",
+        "date": "2025-11-11",
+        "dailyDelta": 0,
+        "note": "duel-entry-duel_mhuzpzl5_cfqu1v"
+      }
+    ],
+    "updatedAt": "2025-11-11T19:54:54.185Z"
+  },
+  "0x34A6a92c63714dA3b13eF785CbCa6258EcF3150C": {
+    "id": "0x34A6a92c63714dA3b13eF785CbCa6258EcF3150C",
+    "totalPoints": 50000,
+    "bankPoints": 47500,
+    "logs": [
+      {
+        "type": "system",
+        "date": "2025-11-11",
+        "dailyDelta": 0,
+        "note": "duel-entry-duel_mhuzpzl5_cfqu1v"
+      }
+    ],
+    "updatedAt": "2025-11-13T22:47:01.967Z"
+  }
+}
