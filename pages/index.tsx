@@ -1394,10 +1394,22 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
                 <img src="/common-pack.jpg" alt="Common Pack" style={{width:'78%', height:'78%', objectFit:'cover', borderRadius:12, boxShadow:'0 8px 20px rgba(0,0,0,0.4)'}} />
               </div>
             </div>
-            <div style={{textAlign:'center', marginTop:8, color:'#cbd5e1', fontWeight:800, fontSize:16}}>5000 POINTS</div>
+            <div style={{
+              textAlign:'center', 
+              marginTop:8, 
+              color: theme === 'light' ? '#0a2c21' : '#cbd5e1', 
+              fontWeight:800, 
+              fontSize:16
+            }}>5000 POINTS</div>
             <div style={{display:'flex', alignItems:'center', justifyContent:'center', gap:6, marginTop:6}}>
               <button className="btn" onClick={()=>setBuyQty(q=>Math.max(1, q-1))} style={{padding:'8px 12px', fontSize:14}}>-</button>
-              <div style={{width:40, textAlign:'center', fontWeight:900, fontSize:16}}>{buyQty}</div>
+              <div style={{
+                width:40, 
+                textAlign:'center', 
+                fontWeight:900, 
+                fontSize:16,
+                color: theme === 'light' ? '#0a2c21' : 'var(--text-inv)'
+              }}>{buyQty}</div>
               <button className="btn" onClick={()=>setBuyQty(q=>Math.min(10, q+1))} style={{padding:'8px 12px', fontSize:14}}>+</button>
             </div>
             <button className="btn" onClick={buyMysteryPacks} style={{
@@ -1418,7 +1430,13 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
       {/* Active Round */}
       <div className="panel">
         <div className="row">
-          <h2 style={{fontWeight:900, letterSpacing:1.2, textTransform:'uppercase', color:'#f8fafc', textShadow:'0 3px 10px rgba(0,0,0,0.35)'}}>Active Round - Beta #1</h2>
+          <h2 style={{
+            fontWeight:900, 
+            letterSpacing:1.2, 
+            textTransform:'uppercase', 
+            color: theme === 'light' ? '#0a2c21' : '#f8fafc', 
+            textShadow: theme === 'light' ? 'none' : '0 3px 10px rgba(0,0,0,0.35)'
+          }}>Active Round - Beta #1</h2>
           {mounted && boostActive && (
             <span className="badge" style={{
               background: 'rgba(0,207,163,.2)',
@@ -1637,7 +1655,13 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
 
         {/* Next Round */}
       <div className="panel">
-        <h2 style={{fontWeight:900, letterSpacing:1.2, textTransform:'uppercase', color:'#f8fafc', textShadow:'0 3px 10px rgba(0,0,0,0.35)'}}>Next Round - Beta #1</h2>
+        <h2 style={{
+          fontWeight:900, 
+          letterSpacing:1.2, 
+          textTransform:'uppercase', 
+          color: theme === 'light' ? '#0a2c21' : '#f8fafc', 
+          textShadow: theme === 'light' ? 'none' : '0 3px 10px rgba(0,0,0,0.35)'
+        }}>Next Round - Beta #1</h2>
         <div className="sep"></div>
         
         <div className="picks" style={{display:'grid', gridTemplateColumns:'repeat(5, minmax(160px, 1fr))', gap:14}}>
