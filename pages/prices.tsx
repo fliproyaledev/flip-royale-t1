@@ -306,7 +306,7 @@ export default function PricesPage() {
               const change = row.changePct ?? 0
               const positive = change >= 0
               return (
-                <div key={row.tokenId} style={{
+                <div key={row.tokenId} className="price-row" style={{
                   display:'grid',
                   gridTemplateColumns:'minmax(220px, 2fr) repeat(4, minmax(120px, 1fr)) 160px',
                   gap:16,
