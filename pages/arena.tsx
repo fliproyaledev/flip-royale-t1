@@ -35,6 +35,14 @@ function handleImageFallback(e: React.SyntheticEvent<HTMLImageElement>) {
   target.src = '/token-logos/placeholder.png'
 }
 
+function utcDayKey(d=new Date()){ const y=d.getUTCFullYear(), m=d.getUTCMonth(), day=d.getUTCDate(); return `${y}-${String(m+1).padStart(2,'0')}-${String(day).padStart(2,'0')}` }
+
+function msUntilNextUtcMidnight(): number {
+  const now = new Date()
+  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0, 0))
+  return next.getTime() - now.getTime()
+}
+
 export default function Arena(){
   const router = useRouter()
   const roomId = typeof router.query.room === 'string' ? router.query.room : ''
@@ -242,6 +250,52 @@ export default function Arena(){
   }
   function canLock(r: DuelRoom | null){ const s=mySide(r); return !!(s && s.entryPaid && !s.locked && (r?.status==='open' || r?.status==='ready' || r?.status==='locked')) }
   function canSettle(r: DuelRoom | null){ if(!r) return false; const both = r.host?.locked && r.guest?.locked; const due = new Date(r.evalAt).getTime() <= Date.now(); return both && due && r.status!=='settled' }
+
+  // UTC 00:00'da otomatik arena settlement kontrolü
+  useEffect(() => {
+    if (!room || room.status === 'settled') return
+
+    let intervalId: NodeJS.Timeout | null = null
+
+    const checkAndSettle = async () => {
+      if (!room) return
+      
+      const today = utcDayKey()
+      const lastSettled = localStorage.getItem(`flipflop-arena-settled-${room.id}`)
+      
+      // Eğer bugün henüz settle edilmediyse ve evalAt geçtiyse, otomatik settle et
+      if (lastSettled !== today && canSettle(room)) {
+        console.log(`🔄 [AUTO-SETTLE-ARENA] UTC 00:00 detected for room ${room.id}, settling...`)
+        try {
+          const r = await fetch('/api/duel/settle', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ roomId: room.id }) })
+          const j = await r.json()
+          if(j.ok) {
+            await loadRoom(room.id)
+            await loadUserPoints(user)
+            localStorage.setItem(`flipflop-arena-settled-${room.id}`, today)
+          }
+        } catch (e) {
+          console.error('Failed to auto-settle arena room:', e)
+        }
+      }
+    }
+
+    // İlk kontrol
+    checkAndSettle()
+
+    // UTC 00:00'a kadar bekle, sonra her gün tekrarla
+    const msUntilMidnight = msUntilNextUtcMidnight()
+    const timeoutId = setTimeout(() => {
+      checkAndSettle()
+      // Her 24 saatte bir kontrol et
+      intervalId = setInterval(checkAndSettle, 24 * 60 * 60 * 1000)
+    }, msUntilMidnight)
+
+    return () => {
+      clearTimeout(timeoutId)
+      if (intervalId) clearInterval(intervalId)
+    }
+  }, [room?.id, room?.status, room?.evalAt, room?.host?.locked, room?.guest?.locked, user])
 
   function addPick(tokenId: string, dir: 'UP'|'DOWN' = 'UP'){
     if (selected.length >= 5) return
