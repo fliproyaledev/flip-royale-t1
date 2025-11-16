@@ -10,6 +10,15 @@ export type LogEntry = {
   note?: string
 }
 
+export type RoundPick = {
+  tokenId: string
+  dir: 'UP' | 'DOWN'
+  duplicateIndex: number
+  locked: boolean
+  pLock?: number
+  pointsLocked?: number
+}
+
 export type UserRecord = {
   id: string
   name?: string
@@ -21,6 +30,11 @@ export type UserRecord = {
   logs: LogEntry[]
   createdAt?: string // Registration timestamp
   updatedAt: string
+  // Flip Royale round data (server-side storage)
+  activeRound?: RoundPick[] // Current active round picks
+  nextRound?: RoundPick[] // Next round picks (saved)
+  currentRound?: number // Current round number
+  lastSettledDay?: string // Last day when round was settled (YYYY-MM-DD)
 }
 
 const DATA_DIR = path.join(process.cwd(), 'data')
