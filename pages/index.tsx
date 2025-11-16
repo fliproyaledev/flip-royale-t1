@@ -322,10 +322,19 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
         setNextRound(savedNextRound)
         setNextRoundLoaded(true)
         // Check if all picks are filled to mark as saved
+        // BUT: Don't auto-mark as saved for new users (let them manually save)
         const hasAllPicks = savedNextRound.every(p => p !== null)
         if (hasAllPicks) {
-          setNextRoundSaved(true)
-          console.log('✅ [LOAD] Marked nextRound as saved (all 5 picks filled)')
+          // Only mark as saved if user explicitly saved (check localStorage flag)
+          const wasExplicitlySaved = localStorage.getItem('flipflop-next-saved') === 'true'
+          if (wasExplicitlySaved) {
+            setNextRoundSaved(true)
+            console.log('✅ [LOAD] Marked nextRound as saved (explicitly saved)')
+          } else {
+            // Don't auto-mark as saved - user needs to click "Save Picks"
+            setNextRoundSaved(false)
+            console.log('ℹ️ [LOAD] nextRound has all picks but not explicitly saved - user must save manually')
+          }
         }
       } else {
         // Try to load again if pre-load failed
@@ -347,10 +356,19 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
                 setNextRound(parsed)
                 setNextRoundLoaded(true)
                 // Check if all picks are filled to mark as saved
+                // BUT: Don't auto-mark as saved for new users (let them manually save)
                 const hasAllPicks = parsed.every((p: any) => p !== null)
                 if (hasAllPicks) {
-                  setNextRoundSaved(true)
-                  console.log('✅ [LOAD] Marked nextRound as saved (all 5 picks filled)')
+                  // Only mark as saved if user explicitly saved (check localStorage flag)
+                  const wasExplicitlySaved = localStorage.getItem('flipflop-next-saved') === 'true'
+                  if (wasExplicitlySaved) {
+                    setNextRoundSaved(true)
+                    console.log('✅ [LOAD] Marked nextRound as saved (explicitly saved)')
+                  } else {
+                    // Don't auto-mark as saved - user needs to click "Save Picks"
+                    setNextRoundSaved(false)
+                    console.log('ℹ️ [LOAD] nextRound has all picks but not explicitly saved - user must save manually')
+                  }
                 }
               } else {
                 console.warn('⚠️ [LOAD] Invalid nextRound data structure, but keeping saved data anyway')
@@ -486,8 +504,15 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
             // Check if all picks are filled to mark as saved
             const hasAllPicks = parsed.every((p: any) => p !== null && p.tokenId)
             if (hasAllPicks) {
-              setNextRoundSaved(true)
-              console.log('✅ [FORCE-LOAD] Marked as saved (all 5 picks filled)')
+              // Only mark as saved if user explicitly saved
+              const wasExplicitlySaved = localStorage.getItem('flipflop-next-saved') === 'true'
+              if (wasExplicitlySaved) {
+                setNextRoundSaved(true)
+                console.log('✅ [FORCE-LOAD] Marked as saved (explicitly saved)')
+              } else {
+                setNextRoundSaved(false)
+                console.log('ℹ️ [FORCE-LOAD] Has all picks but not explicitly saved')
+              }
             }
           }
         }
@@ -541,8 +566,15 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
             // Check if all picks are filled to mark as saved
             const hasAllPicks = parsed.every((p: any) => p !== null)
             if (hasAllPicks) {
-              setNextRoundSaved(true)
-              console.log('✅ [SAFETY] Marked nextRound as saved (all 5 picks filled)')
+              // Only mark as saved if user explicitly saved
+              const wasExplicitlySaved = localStorage.getItem('flipflop-next-saved') === 'true'
+              if (wasExplicitlySaved) {
+                setNextRoundSaved(true)
+                console.log('✅ [SAFETY] Marked nextRound as saved (explicitly saved)')
+              } else {
+                setNextRoundSaved(false)
+                console.log('ℹ️ [SAFETY] Has all picks but not explicitly saved')
+              }
             }
           } else if (hasData && currentHasData) {
             // Both have data, but verify they match
@@ -554,7 +586,13 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
               setNextRoundLoaded(true)
               const hasAllPicks = parsed.every((p: any) => p !== null)
               if (hasAllPicks) {
-                setNextRoundSaved(true)
+                // Only mark as saved if user explicitly saved
+                const wasExplicitlySaved = localStorage.getItem('flipflop-next-saved') === 'true'
+                if (wasExplicitlySaved) {
+                  setNextRoundSaved(true)
+                } else {
+                  setNextRoundSaved(false)
+                }
               }
             }
           }
@@ -1005,6 +1043,8 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
         console.log('💾 [SAVE] Serialized string:', serialized)
         
         localStorage.setItem('flipflop-next', serialized)
+        // Mark as explicitly saved
+        localStorage.setItem('flipflop-next-saved', 'true')
         
         // Verify it was saved
         const verify = localStorage.getItem('flipflop-next')
@@ -1038,11 +1078,13 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
 
   function enableEditing() {
     setNextRoundSaved(false)
+    localStorage.removeItem('flipflop-next-saved') // Clear saved flag when editing
     console.log('🔄 [CHANGE] User wants to modify picks')
   }
 
   function changeNextRoundPicks() {
     setNextRoundSaved(false)
+    localStorage.removeItem('flipflop-next-saved') // Clear saved flag when editing
     console.log('🔄 [CHANGE] User wants to modify picks')
   }
 
@@ -1324,6 +1366,7 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
     setNextRoundLoaded(false) // Reset flag to allow new card additions
     setNextRoundSaved(false) // Reset saved flag
     try {
+      localStorage.removeItem('flipflop-next-saved') // Clear saved flag
       localStorage.setItem('flipflop-next', JSON.stringify(Array(5).fill(null)))
       console.log('💾 Cleared nextRound after round settlement')
     } catch {}
