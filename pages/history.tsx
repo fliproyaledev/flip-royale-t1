@@ -5,6 +5,9 @@ import ThemeToggle from '../components/ThemeToggle'
 type DayResult = {
   dayKey: string
   total: number
+  userId?: string // User who participated
+  userName?: string // User name
+  walletAddress?: string // Wallet address
   items: {
     tokenId: string
     symbol: string
@@ -160,7 +163,7 @@ export default function History() {
       {hasArenaHistory && (
         <div className="panel" style={{marginBottom: 24}}>
           <div className="row">
-            <h2>Arena History</h2>
+            <h2>Arena Royale History</h2>
             <span className="muted">{arenaHistory.length} duels</span>
           </div>
           <div className="sep"></div>
@@ -293,7 +296,7 @@ export default function History() {
       {/* Play Mode History */}
       <div className="panel">
         <div className="row">
-          <h2>Round History</h2>
+          <h2>Flip Royale History</h2>
           {hasHistory && (
             <span className="muted">{history.length} rounds</span>
           )}
@@ -370,7 +373,7 @@ export default function History() {
             {!hasArenaHistory ? (
               <>No rounds recorded yet. Play a round to start building history!</>
             ) : (
-              <>No PLAY mode rounds recorded yet.</>
+              <>No Flip Royale rounds recorded yet.</>
             )}
           </div>
         )}
