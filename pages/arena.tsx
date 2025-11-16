@@ -51,6 +51,7 @@ export default function Arena(){
   const [rooms, setRooms] = useState<DuelRoom[]>([])
   const [room, setRoom] = useState<DuelRoom|null>(null)
   const [points, setPoints] = useState<number>(0)
+  const [giftPoints, setGiftPoints] = useState<number>(0)
   const [inventory, setInventory] = useState<Record<string, number>>({})
   const [selected, setSelected] = useState<PickSel[]>([])
   const [loading, setLoading] = useState(true)
@@ -106,7 +107,7 @@ export default function Arena(){
     try{
       const r = await fetch(`/api/users/me?userId=${encodeURIComponent(u.id)}`)
       const j = await r.json()
-      if (j?.ok) {
+      if (j?.ok && j?.user) {
         const newPoints = j.user?.bankPoints||0
         setPoints(prev => {
           // Only update if points actually changed
@@ -118,6 +119,9 @@ export default function Arena(){
           }
           return prev
         })
+        if (j.user.giftPoints !== undefined) {
+          setGiftPoints(j.user.giftPoints)
+        }
       }
     }catch{}
     finally {
@@ -383,9 +387,9 @@ export default function Arena(){
           }} />
         </div>
         <nav className="tabs">
-          <a className="tab" href="/">PLAY</a>
+          <a className="tab" href="/">FLIP ROYALE</a>
           <a className="tab" href="/prices">PRICES</a>
-          <a className="tab active" href="/arena">ARENA</a>
+          <a className="tab active" href="/arena">ARENA ROYALE</a>
           <a className="tab" href="/guide">GUIDE</a>
           <a className="tab" href="/inventory">INVENTORY</a>
           <a className="tab" href="/leaderboard">LEADERBOARD</a>
@@ -457,17 +461,33 @@ export default function Arena(){
               </div>
               
               <div style={{
-                background: 'rgba(0,207,163,0.15)',
-                border: '1px solid rgba(0,207,163,0.25)',
-                borderRadius: 10,
-                padding: '8px 14px',
-                fontSize: 15,
-                fontWeight: 700,
-                color: '#86efac',
-                textShadow: '0 1px 2px rgba(0,0,0,0.3)',
-                whiteSpace: 'nowrap'
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'flex-end',
+                gap: 4
               }}>
-                {points.toLocaleString()} pts
+                <div style={{
+                  background: 'rgba(0,207,163,0.15)',
+                  border: '1px solid rgba(0,207,163,0.25)',
+                  borderRadius: 10,
+                  padding: '8px 14px',
+                  fontSize: 15,
+                  fontWeight: 700,
+                  color: '#86efac',
+                  textShadow: '0 1px 2px rgba(0,0,0,0.3)',
+                  whiteSpace: 'nowrap'
+                }}>
+                  {(points - giftPoints).toLocaleString()} pts
+                </div>
+                {giftPoints > 0 && (
+                  <div style={{
+                    fontSize: 11,
+                    color: 'rgba(255,255,255,0.5)',
+                    fontWeight: 500
+                  }}>
+                    Gift: {giftPoints.toLocaleString()} pts
+                  </div>
+                )}
               </div>
               
               <button
@@ -505,7 +525,7 @@ export default function Arena(){
         {!roomId && (
           <>
             <div className="row" style={{justifyContent:'space-between', alignItems:'center'}}>
-              <h2>Arena</h2>
+              <h2>Arena Royale</h2>
               <div style={{display:'flex', gap:12, alignItems:'center'}}>
                 {points < 2500 && (
                   <button className="btn" onClick={grantTest}>Get 100k Test Points</button>
