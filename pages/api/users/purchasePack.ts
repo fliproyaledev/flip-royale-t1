@@ -39,14 +39,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const users = await loadUsers()
     const u = getOrCreateUser(users, userId)
     
-    if (u.bankPoints < cost) {
+    // Check if user has enough total points (giftPoints + bankPoints)
+    const totalAvailable = (u.giftPoints || 0) + u.bankPoints
+    if (totalAvailable < cost) {
       return res.status(400).json({ ok: false, error: 'Insufficient points' })
     }
 
+    // debitBank will automatically spend gift points first, then normal points
     debitBank(u, cost, `purchase-${packType}-pack`, new Date().toISOString().slice(0, 10))
     await saveUsers(users)
     
-    return res.status(200).json({ ok: true, bankPoints: u.bankPoints })
+    return res.status(200).json({ ok: true, bankPoints: u.bankPoints, giftPoints: u.giftPoints || 0 })
   } catch (e: any) {
     console.error('Purchase pack error:', e)
     return res.status(500).json({ ok: false, error: e?.message || 'Purchase failed' })
