@@ -14,7 +14,14 @@ type RoundResult = {
   percentage: number
   duplicateIndex: number
 }
-type DayResult = { dayKey:string; total:number; items:{ tokenId:string; symbol:string; dir:'UP'|'DOWN'; duplicateIndex:number; points:number }[] }
+type DayResult = { 
+  dayKey:string
+  total:number
+  userId?: string // User who participated
+  userName?: string // User name
+  walletAddress?: string // Wallet address
+  items:{ tokenId:string; symbol:string; dir:'UP'|'DOWN'; duplicateIndex:number; points:number }[]
+}
 
 // TOKENS imported from ../lib/tokens
 
@@ -124,6 +131,7 @@ export default function Home(){
   const [stateLoaded, setStateLoaded] = useState(false)
   const [inventoryLoaded, setInventoryLoaded] = useState(false)
   const [points, setPoints] = useState<number>(0)
+  const [giftPoints, setGiftPoints] = useState<number>(0)
   const [buyQty, setBuyQty] = useState<number>(1)
   const [showMysteryResults, setShowMysteryResults] = useState<{open:boolean; cards:string[]}>({open:false, cards:[]})
   const [starterAvailable, setStarterAvailable] = useState(false)
@@ -191,11 +199,16 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
         try {
           const r = await fetch(`/api/users/me?userId=${encodeURIComponent(parsed.id)}`)
           const j = await r.json()
-          if (j?.ok && j?.user?.bankPoints !== undefined) {
-            setPoints(j.user.bankPoints)
-            try {
-              localStorage.setItem('flipflop-points', String(j.user.bankPoints))
-            } catch {}
+          if (j?.ok && j?.user) {
+            if (j.user.bankPoints !== undefined) {
+              setPoints(j.user.bankPoints)
+              try {
+                localStorage.setItem('flipflop-points', String(j.user.bankPoints))
+              } catch {}
+            }
+            if (j.user.giftPoints !== undefined) {
+              setGiftPoints(j.user.giftPoints)
+            }
           }
         } catch {}
       }
@@ -403,24 +416,39 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
     if (!mounted || !stateLoaded) return
 
     let intervalId: NodeJS.Timeout | null = null
+    let checkInterval: NodeJS.Timeout | null = null
 
     const checkAndSettle = async () => {
       const today = utcDayKey()
       const lastSettled = localStorage.getItem('flipflop-last-settled-day')
+      
+      console.log('⏰ [AUTO-SETTLE-CHECK]', {
+        today,
+        lastSettled,
+        activeLength: active.length,
+        shouldSettle: lastSettled !== today && active.length > 0,
+        currentUTC: new Date().toUTCString()
+      })
       
       // Eğer bugün henüz settle edilmediyse ve active round varsa, settle et
       if (lastSettled !== today && active.length > 0) {
         console.log('🔄 [AUTO-SETTLE] UTC 00:00 detected, settling round...')
         await simulateNewDay()
         localStorage.setItem('flipflop-last-settled-day', today)
+        console.log('✅ [AUTO-SETTLE] Round settled successfully')
       }
     }
 
     // İlk kontrol
     checkAndSettle()
 
+    // Her 10 saniyede bir kontrol et (UTC 00:00'ı yakalamak için)
+    checkInterval = setInterval(checkAndSettle, 10000)
+
     // UTC 00:00'a kadar bekle, sonra her gün tekrarla
     const msUntilMidnight = msUntilNextUtcMidnight()
+    console.log('⏰ [AUTO-SETTLE] Next UTC 00:00 in', Math.floor(msUntilMidnight / 1000 / 60), 'minutes')
+    
     const timeoutId = setTimeout(() => {
       checkAndSettle()
       // Her 24 saatte bir kontrol et
@@ -430,6 +458,7 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
     return () => {
       clearTimeout(timeoutId)
       if (intervalId) clearInterval(intervalId)
+      if (checkInterval) clearInterval(checkInterval)
     }
   }, [mounted, stateLoaded, active.length])
 
@@ -555,12 +584,19 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
     
     // First, get current points from server to ensure accuracy
     let currentPoints = points
+    let currentGiftPoints = giftPoints
     try {
       const checkR = await fetch(`/api/users/me?userId=${encodeURIComponent(user.id)}`)
       const checkJ = await checkR.json()
-      if (checkJ?.ok && checkJ?.user?.bankPoints !== undefined) {
-        currentPoints = checkJ.user.bankPoints
-        setPoints(currentPoints)
+      if (checkJ?.ok && checkJ?.user) {
+        if (checkJ.user.bankPoints !== undefined) {
+          currentPoints = checkJ.user.bankPoints
+          setPoints(currentPoints)
+        }
+        if (checkJ.user.giftPoints !== undefined) {
+          currentGiftPoints = checkJ.user.giftPoints
+          setGiftPoints(currentGiftPoints)
+        }
         try {
           localStorage.setItem('flipflop-points', String(currentPoints))
         } catch {}
@@ -572,9 +608,10 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
     const qty = Math.max(1, Math.min(10, buyQty))
     const cost = 5000 * qty
     
-    // Check with current server points
-    if (currentPoints < cost) { 
-      alert(`Not enough points. You have ${currentPoints.toLocaleString()} pts, need ${cost.toLocaleString()} pts.`)
+    // Check with total available points (giftPoints + bankPoints)
+    const totalAvailable = currentGiftPoints + currentPoints
+    if (totalAvailable < cost) { 
+      alert(`Not enough points. You have ${totalAvailable.toLocaleString()} pts (${currentGiftPoints.toLocaleString()} gift + ${currentPoints.toLocaleString()} earned), need ${cost.toLocaleString()} pts.`)
       return 
     }
     
@@ -613,6 +650,9 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
       
       // Update points from server response
       setPoints(j.bankPoints || 0)
+      if (j.giftPoints !== undefined) {
+        setGiftPoints(j.giftPoints)
+      }
       try {
         localStorage.setItem('flipflop-points', String(j.bankPoints || 0))
       } catch {}
@@ -1121,6 +1161,10 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
   }
 
   async function simulateNewDay() {
+    console.log('🔄 [SIMULATE-NEW-DAY] Starting round settlement...')
+    console.log('🔄 [SIMULATE-NEW-DAY] Active picks:', active)
+    console.log('🔄 [SIMULATE-NEW-DAY] Next round picks:', nextRound)
+    
     // For locked cards, use locked points. For unlocked cards, calculate using UTC 00:00 snapshot
     // First, fetch fresh prices for all active tokens at UTC 00:00
     const pricePromises = active
@@ -1204,6 +1248,9 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
       const entry: DayResult = {
         dayKey,
         total: totalPoints,
+        userId: user?.id,
+        userName: user?.username,
+        walletAddress: user?.walletAddress,
         items: roundResults.map(result => ({
           tokenId: result.tokenId,
           symbol: result.symbol,
@@ -1216,6 +1263,12 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
         const updated = [entry, ...prev]
         return updated.slice(0, 30)
       })
+      // Save to localStorage
+      try {
+        const currentHistory = JSON.parse(localStorage.getItem('flipflop-history') || '[]')
+        const updatedHistory = [entry, ...currentHistory].slice(0, 30)
+        localStorage.setItem('flipflop-history', JSON.stringify(updatedHistory))
+      } catch {}
     }
     // Fetch fresh prices for new active round tokens to set baseline (p0)
     // This ensures p0 is the 24h ago price when the new round starts
@@ -1268,7 +1321,8 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
     
     // Clear next round after moving to active
     setNextRound(Array(5).fill(null))
-    setNextRoundLoaded(true) // Mark as loaded so it can be saved
+    setNextRoundLoaded(false) // Reset flag to allow new card additions
+    setNextRoundSaved(false) // Reset saved flag
     try {
       localStorage.setItem('flipflop-next', JSON.stringify(Array(5).fill(null)))
       console.log('💾 Cleared nextRound after round settlement')
@@ -1322,9 +1376,9 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
           }} />
         </div>
         <nav className="tabs">
-          <a className="tab" href="/">PLAY</a>
+          <a className="tab active" href="/">FLIP ROYALE</a>
           <a className="tab" href="/prices">PRICES</a>
-          <a className="tab" href="/arena">ARENA</a>
+          <a className="tab" href="/arena">ARENA ROYALE</a>
           <a className="tab" href="/guide">GUIDE</a>
           <a className="tab" href="/inventory">INVENTORY</a>
           <a className="tab" href="/leaderboard">LEADERBOARD</a>
@@ -1396,17 +1450,33 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
               </div>
               
               <div style={{
-                background: theme === 'light' ? 'rgba(0,207,163,0.25)' : 'rgba(0,207,163,0.15)',
-                border: `1px solid ${theme === 'light' ? 'rgba(0,207,163,0.4)' : 'rgba(0,207,163,0.25)'}`,
-                borderRadius: 10,
-                padding: '8px 14px',
-                fontSize: 15,
-                fontWeight: 700,
-                color: theme === 'light' ? '#059669' : '#86efac',
-                textShadow: theme === 'light' ? 'none' : '0 1px 2px rgba(0,0,0,0.3)',
-                whiteSpace: 'nowrap'
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'flex-end',
+                gap: 4
               }}>
-                {points.toLocaleString()} pts
+                <div style={{
+                  background: theme === 'light' ? 'rgba(0,207,163,0.25)' : 'rgba(0,207,163,0.15)',
+                  border: `1px solid ${theme === 'light' ? 'rgba(0,207,163,0.4)' : 'rgba(0,207,163,0.25)'}`,
+                  borderRadius: 10,
+                  padding: '8px 14px',
+                  fontSize: 15,
+                  fontWeight: 700,
+                  color: theme === 'light' ? '#059669' : '#86efac',
+                  textShadow: theme === 'light' ? 'none' : '0 1px 2px rgba(0,0,0,0.3)',
+                  whiteSpace: 'nowrap'
+                }}>
+                  {(points - giftPoints).toLocaleString()} pts
+                </div>
+                {giftPoints > 0 && (
+                  <div style={{
+                    fontSize: 11,
+                    color: theme === 'light' ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.5)',
+                    fontWeight: 500
+                  }}>
+                    Gift: {giftPoints.toLocaleString()} pts
+                  </div>
+                )}
               </div>
               
               <button
@@ -1548,7 +1618,7 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
             textTransform:'uppercase', 
             color: theme === 'light' ? '#0a2c21' : '#f8fafc', 
             textShadow: theme === 'light' ? 'none' : '0 3px 10px rgba(0,0,0,0.35)'
-          }}>Active Round - Beta #1</h2>
+          }}>Flip Royale - Beta #1</h2>
           {mounted && boostActive && (
             <span className="badge" style={{
               background: 'rgba(0,207,163,.2)',
@@ -1566,7 +1636,7 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
         {starterAvailable && (
           <div className="panel" style={{marginBottom: 12, background:'linear-gradient(135deg, rgba(34,197,94,0.15), rgba(132,204,22,0.15))', border:'1px solid rgba(34,197,94,0.3)'}}>
             <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:12}}>
-              <div style={{fontWeight:900, color:'#bbf7d0'}}>🎁 Starter Reward available: 50,000 points + 1 Common Pack</div>
+              <div style={{fontWeight:900, color:'#bbf7d0'}}>🎁 Starter Reward available: 10,000 points + 1 Common Pack</div>
               <button className="btn primary" onClick={() => claimStarterReward()}>Claim</button>
         </div>
           </div>
@@ -1773,7 +1843,7 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
           textTransform:'uppercase', 
           color: theme === 'light' ? '#0a2c21' : '#f8fafc', 
           textShadow: theme === 'light' ? 'none' : '0 3px 10px rgba(0,0,0,0.35)'
-        }}>Next Round - Beta #1</h2>
+        }}>Flip Royale - Beta #1</h2>
         <div className="sep"></div>
 
         <div className="picks" style={{display:'grid', gridTemplateColumns:'repeat(5, minmax(160px, 1fr))', gap:14}}>
