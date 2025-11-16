@@ -263,12 +263,27 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
 
     // Check if this is a fresh start (first time or reset)
     // IMPORTANT: Only clear data if flipflop-has-started doesn't exist AND nextRound is empty
+    // ALSO: Check if user has no inventory (new user) - if so, clear nextRound
     const hasStarted = localStorage.getItem('flipflop-has-started')
     const hasNextRound = savedNextRound !== null && savedNextRound.some(p => p !== null)
-    const isFreshStart = !hasStarted && !hasNextRound
     
-    if (isFreshStart) {
+    // Check if inventory is empty (new user indicator)
+    const savedInventory = localStorage.getItem('flipflop-inventory')
+    let hasInventory = false
+    if (savedInventory) {
+      try {
+        const parsedInv = JSON.parse(savedInventory)
+        hasInventory = Object.keys(parsedInv).length > 0 && Object.values(parsedInv).some((v: any) => v > 0)
+      } catch {}
+    }
+    
+    // New user: no inventory AND no started flag OR no nextRound
+    const isNewUser = !hasInventory && (!hasStarted || !hasNextRound)
+    const isFreshStart = !hasStarted && !hasNextRound || isNewUser
+    
+    if (isFreshStart || isNewUser) {
       // Mark as started - only on first visit when there's no saved data
+      // OR for new users with no inventory
       try {
         localStorage.setItem('flipflop-has-started', '1')
         setCurrentRound(1)
@@ -279,10 +294,15 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
         localStorage.removeItem('flipflop_state')
         localStorage.removeItem('flipflop-global-highlights')
         localStorage.removeItem('flipflop-last-settled-day')
+        // CRITICAL: Clear nextRound for new users
+        localStorage.removeItem('flipflop-next')
+        localStorage.removeItem('flipflop-next-saved')
         setActive([])
         setNextRound(Array(5).fill(null))
         setNextRoundLoaded(true)
+        setNextRoundSaved(false)
         setStateLoaded(true)
+        console.log('🆕 [NEW-USER] Cleared nextRound for new user (no inventory)')
         return // Early return for fresh start
       } catch (e) {
         console.warn('Fresh start setup failed:', e)
@@ -293,6 +313,7 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
 
     // Normal load - restore everything from localStorage
     // CRITICAL: Always preserve nextRound if it exists
+    // BUT: For new users with no inventory, clear nextRound
     try {
       // Load current round
       const savedRound = localStorage.getItem('flipflop-current-round')
@@ -316,8 +337,15 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
       }
 
       // Load next round - use the pre-loaded value or load from localStorage
-      // CRITICAL: Always prioritize saved data, never reset unless truly empty
-      if (savedNextRound) {
+      // CRITICAL: For new users (no inventory), clear nextRound even if it exists
+      if (isNewUser && savedNextRound && savedNextRound.some(p => p !== null)) {
+        console.log('🆕 [NEW-USER] Clearing nextRound for new user (has no inventory)')
+        localStorage.removeItem('flipflop-next')
+        localStorage.removeItem('flipflop-next-saved')
+        setNextRound(Array(5).fill(null))
+        setNextRoundLoaded(true)
+        setNextRoundSaved(false)
+      } else if (savedNextRound) {
         console.log('✅ [LOAD] Restoring nextRound from pre-loaded value:', savedNextRound)
         setNextRound(savedNextRound)
         setNextRoundLoaded(true)
@@ -346,7 +374,15 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
             const parsed = JSON.parse(savedNext)
             console.log('🔍 [LOAD] Parsed nextRound on second attempt:', parsed)
             
-            if (Array.isArray(parsed) && parsed.length === 5) {
+            // CRITICAL: For new users (no inventory), clear nextRound even if it exists
+            if (isNewUser && Array.isArray(parsed) && parsed.some((p: any) => p !== null)) {
+              console.log('🆕 [NEW-USER] Clearing nextRound for new user on second attempt (has no inventory)')
+              localStorage.removeItem('flipflop-next')
+              localStorage.removeItem('flipflop-next-saved')
+              setNextRound(Array(5).fill(null))
+              setNextRoundLoaded(true)
+              setNextRoundSaved(false)
+            } else if (Array.isArray(parsed) && parsed.length === 5) {
               const isValid = parsed.every((item: any) => 
                 item === null || 
                 (typeof item === 'object' && item !== null && item.tokenId && typeof item.dir === 'string')
@@ -1661,7 +1697,7 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
             textTransform:'uppercase', 
             color: theme === 'light' ? '#0a2c21' : '#f8fafc', 
             textShadow: theme === 'light' ? 'none' : '0 3px 10px rgba(0,0,0,0.35)'
-          }}>Flip Royale - Beta #1</h2>
+          }}>Active Round</h2>
           {mounted && boostActive && (
             <span className="badge" style={{
               background: 'rgba(0,207,163,.2)',
@@ -1885,8 +1921,8 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
           letterSpacing:1.2, 
           textTransform:'uppercase', 
           color: theme === 'light' ? '#0a2c21' : '#f8fafc', 
-          textShadow: theme === 'light' ? 'none' : '0 3px 10px rgba(0,0,0,0.35)'
-        }}>Flip Royale - Beta #1</h2>
+            textShadow: theme === 'light' ? 'none' : '0 3px 10px rgba(0,0,0,0.35)'
+        }}>Next Round</h2>
         <div className="sep"></div>
 
         <div className="picks" style={{display:'grid', gridTemplateColumns:'repeat(5, minmax(160px, 1fr))', gap:14}}>
