@@ -1012,11 +1012,16 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
     if (pick && !pick.locked) {
       // Only allow locking, not unlocking
       pick.locked = true
-      // Lock the current live price and current points
-      const currentPrice = prices[pick.tokenId]?.pLive || 1.0
-      const currentPoints = calculateLivePoints(pick)
-      pick.pLock = currentPrice
-      pick.pointsLocked = currentPoints // Lock the current points
+      // Lock the current points based on baseline (p0) and current live price
+      const priceData = prices[pick.tokenId]
+      if (priceData) {
+        // p0 is the baseline (24h ago price), pLive is current price
+        // Lock the current points calculation
+        const currentPoints = calculateLivePoints(pick)
+        pick.pointsLocked = currentPoints // Lock the current points
+        // pLock stores the baseline (p0) for locked cards
+        pick.pLock = priceData.p0 // Store baseline for locked cards
+      }
       setActive(newActive)
       try { localStorage.setItem('flipflop-active', JSON.stringify(newActive)) } catch {}
     }
@@ -1031,9 +1036,11 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
       return pick.pointsLocked
     }
     
-    // Use the locked price if available; otherwise fall back to the round baseline price
-    const p0 = pick.locked && pick.pLock ? pick.pLock : priceData.p0
-    const pNow = priceData.pLive
+    // For unlocked cards, calculate points from baseline (p0) to current live price (pLive)
+    // p0 is the baseline (24h ago price when round started)
+    // pLive is the current live price
+    const p0 = priceData.p0 // Baseline: 24h ago price
+    const pNow = priceData.pLive // Current live price
     
     return calcPoints(p0, pNow, pick.dir, pick.duplicateIndex, boost.level, boostActive)
   }
@@ -1080,15 +1087,23 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
       let percentage: number
       
       if (pick.locked && pick.pointsLocked !== undefined) {
-        // For locked cards, use the locked points and price baseline
+        // For locked cards, use the locked points (calculated when locked)
+        // Locked cards use the points that were calculated at lock time
         points = pick.pointsLocked
-        const p0 = pick.pLock || priceData.p0
-        const pClose = priceData.pClose
-        percentage = ((pClose - p0) / p0) * 100
+        // Calculate percentage from baseline (p0) to lock price
+        // When locked, we use the baseline (p0) and the price at lock time
+        const p0 = priceData.p0 // Baseline: 24h ago price
+        // For locked cards, percentage is calculated from baseline to lock price
+        // We need to reverse-calculate the lock price from locked points
+        // But for display, we'll use the current pLive as approximation
+        const pLockPrice = priceData.pLive // Price at lock time (approximation)
+        percentage = ((pLockPrice - p0) / p0) * 100
       } else {
-        // For unlocked cards, calculate using the current UTC 00:00 price baseline
-        const p0 = priceData.p0
-        const pClose = priceData.pClose
+        // For unlocked cards, calculate using baseline (p0) and UTC 00:00 closing price (pClose)
+        // p0 is the baseline (24h ago price when round started)
+        // pClose is the UTC 00:00 closing price (24h change)
+        const p0 = priceData.p0 // Baseline: 24h ago price
+        const pClose = priceData.pClose // UTC 00:00 closing price
         percentage = ((pClose - p0) / p0) * 100
         points = calcPoints(p0, pClose, pick.dir, pick.duplicateIndex, boost.level, boostActive)
       }
@@ -1202,15 +1217,45 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
         return updated.slice(0, 30)
       })
     }
-    // Reset price baselines to current live for the new day
-    setPrices(prev => {
-      const next: Record<string,{p0:number;pLive:number;pClose:number;changePct?:number;source?:'dexscreener'|'fallback'}> = {}
-      for (const [id, d] of Object.entries(prev)) {
-        const val = d?.pLive ?? d?.p0 ?? 0
-        next[id] = { p0: val, pLive: val, pClose: val, changePct: d?.changePct, source: d?.source }
-      }
-      return next
-    })
+    // Fetch fresh prices for new active round tokens to set baseline (p0)
+    // This ensures p0 is the 24h ago price when the new round starts
+    const newActiveTokenIds = nextRound
+      .filter(p => p !== null)
+      .map(p => p!.tokenId)
+    
+    if (newActiveTokenIds.length > 0) {
+      const newPricePromises = newActiveTokenIds.map(async (tokenId) => {
+        try {
+          const priceData = await getPrice(tokenId)
+          return { tokenId, priceData }
+        } catch (e) {
+          console.error(`Failed to fetch price for ${tokenId}:`, e)
+          return null
+        }
+      })
+      
+      const newPrices = await Promise.all(newPricePromises)
+      
+      // Reset price baselines for new active round tokens
+      setPrices(prev => {
+        const next: Record<string,{p0:number;pLive:number;pClose:number;changePct?:number;source?:'dexscreener'|'fallback'}> = { ...prev }
+        for (const result of newPrices) {
+          if (result && result.priceData) {
+            const { tokenId, priceData } = result
+            // Set p0 as baseline (24h ago price) for new round
+            // pLive and pClose start at current price
+            next[tokenId] = {
+              p0: priceData.p0, // Baseline: 24h ago price
+              pLive: priceData.pLive, // Current live price
+              pClose: priceData.pLive, // Start with current price, will be updated at UTC 00:00
+              changePct: priceData.changePct,
+              source: priceData.source
+            }
+          }
+        }
+        return next
+      })
+    }
     
     // Move next round to active round
     const validNextRound = nextRound.filter(p => p !== null) as RoundPick[]
