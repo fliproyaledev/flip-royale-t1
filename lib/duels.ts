@@ -5,7 +5,7 @@ import type { Token } from './tokens'
 import type { DexscreenerPairRef, DexscreenerQuote } from './dexscreener'
 import { getDexPairQuote, findDexPairForToken } from './dexscreener'
 import { getGeckoPoolQuote } from './gecko'
-import { getOrCreateUser, loadUsers, saveUsers, creditBank, debitBank, loadUsersSync, saveUsersSync } from './users'
+import { getOrCreateUser, loadUsers, saveUsers, creditBank, creditGamePoints, debitBank, loadUsersSync, saveUsersSync } from './users'
 import { loadDuelsKV, saveDuelsKV } from './kv'
 
 export type DuelPickInput = { tokenId: string; direction: 'up' | 'down' }
@@ -346,12 +346,12 @@ export async function settleRoom(roomId: string): Promise<{ room: DuelRoom; user
 
   let payoutPerWinner = 0
   if (winner === 'host' || winner === 'guest') {
-    // Winner gets both entries into bankPoints only (not leaderboard)
+    // Winner gets both entries - update both totalPoints (leaderboard) and bankPoints
     payoutPerWinner = room.entryCost * 2
     const target = winner === 'host' ? hostUser : (guestUser as any)
-    creditBank(target, payoutPerWinner, `duel-win-${room.id}`, room.baseDay)
+    creditGamePoints(target, payoutPerWinner, `duel-win-${room.id}`, room.baseDay)
   } else {
-    // Draw → refund entries to bankPoints
+    // Draw → refund entries to bankPoints only (not leaderboard, since it's a refund)
     creditBank(hostUser, room.entryCost, `duel-refund-${room.id}`, room.baseDay)
     if (guestUser) {
       creditBank(guestUser, room.entryCost, `duel-refund-${room.id}`, room.baseDay)
