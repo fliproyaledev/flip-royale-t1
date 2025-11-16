@@ -136,7 +136,12 @@ export default function Auth(){
         
         // Register on server to get initial points and pack
         try {
-          const r = await fetch(`/api/users/me?userId=${encodeURIComponent(userId)}`)
+          // Register with wallet address if available
+          const registerUrl = walletAddress 
+            ? `/api/users/me?userId=${encodeURIComponent(userId)}&walletAddress=${encodeURIComponent(walletAddress)}`
+            : `/api/users/me?userId=${encodeURIComponent(userId)}`
+          
+          const r = await fetch(registerUrl)
           const j = await r.json()
           if (j?.ok && j?.user) {
             const userData = j.user
@@ -151,11 +156,11 @@ export default function Auth(){
             localStorage.setItem('flipflop-user', JSON.stringify(newUser))
             
             // Set initial points and starter pack availability
-            const bankPoints = userData.bankPoints || 50000
+            const bankPoints = userData.bankPoints || 10000
             localStorage.setItem('flipflop-points', String(bankPoints))
             localStorage.setItem('flipflop-starter-available', '1')
             
-            setSuccess('Registration successful! You received 50,000 points and 1 starter pack!')
+            setSuccess('Registration successful! You received 10,000 points and 1 starter pack!')
             setTimeout(() => router.push('/'), 1500)
             return
           }
