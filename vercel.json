@@ -6,6 +6,16 @@
   "regions": ["iad1"],
   "env": {
     "PRICE_POLL_INTERVAL_MS": "60000"
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/settle-rounds",
+      "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/settle-arenas",
+      "schedule": "0 0 * * *"
+    }
+  ]
 }
 
