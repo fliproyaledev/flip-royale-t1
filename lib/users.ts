@@ -14,10 +14,12 @@ export type UserRecord = {
   id: string
   name?: string
   avatar?: string
+  walletAddress?: string // Wallet address for wallet connection
   totalPoints: number // leaderboard points (never decreased, excludes gift points)
   bankPoints: number  // spendable points for Arena (includes gift points)
   giftPoints: number  // initial gift points (not counted in leaderboard)
   logs: LogEntry[]
+  createdAt?: string // Registration timestamp
   updatedAt: string
 }
 
@@ -143,9 +145,39 @@ export function creditBank(user: UserRecord, amount: number, note?: string, date
   user.updatedAt = new Date().toISOString()
 }
 
+// Credit game points (for leaderboard) - updates both totalPoints and bankPoints
+export function creditGamePoints(user: UserRecord, amount: number, note?: string, dateIso?: string) {
+  if (!Number.isFinite(amount)) return
+  // Only add positive amounts to totalPoints (leaderboard)
+  if (amount > 0) {
+    user.totalPoints += amount
+  }
+  // Always update bankPoints (spendable balance)
+  user.bankPoints += amount
+  user.logs.push({ type: 'system', date: (dateIso || new Date().toISOString().slice(0,10)), dailyDelta: amount > 0 ? amount : 0, note })
+  user.updatedAt = new Date().toISOString()
+}
+
 export function debitBank(user: UserRecord, amount: number, note?: string, dateIso?: string) {
   if (!Number.isFinite(amount)) return
-  user.bankPoints = Math.max(0, user.bankPoints - amount)
+  
+  // Spend gift points first, then normal points
+  const giftPointsToSpend = Math.min(amount, user.giftPoints || 0)
+  const remainingAmount = amount - giftPointsToSpend
+  
+  // Deduct gift points first
+  if (giftPointsToSpend > 0) {
+    user.giftPoints = Math.max(0, (user.giftPoints || 0) - giftPointsToSpend)
+    // Also deduct from bankPoints when gift points are spent
+    // This ensures bankPoints reflects total spendable balance correctly
+    user.bankPoints = Math.max(0, user.bankPoints - giftPointsToSpend)
+  }
+  
+  // Deduct remaining from bankPoints (normal points)
+  if (remainingAmount > 0) {
+    user.bankPoints = Math.max(0, user.bankPoints - remainingAmount)
+  }
+  
   user.logs.push({ type: 'system', date: (dateIso || new Date().toISOString().slice(0,10)), dailyDelta: 0, note })
   user.updatedAt = new Date().toISOString()
 }
