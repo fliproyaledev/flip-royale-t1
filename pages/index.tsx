@@ -23,6 +23,12 @@ type HighlightState = { topGainers: HighlightEntry[]; topLosers: HighlightEntry[
 
 function utcDayKey(d=new Date()){ const y=d.getUTCFullYear(), m=d.getUTCMonth(), day=d.getUTCDate(); return `${y}-${String(m+1).padStart(2,'0')}-${String(day).padStart(2,'0')}` }
 
+function msUntilNextUtcMidnight(): number {
+  const now = new Date()
+  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0, 0))
+  return next.getTime() - now.getTime()
+}
+
 function randInt(n:number){ return Math.floor(Math.random()*n) }
 function makeRandom5(tokens:Token[]){ return Array.from({length:5},()=>tokens[randInt(tokens.length)].id) }
 async function getPrice(tokenId: string) { const r = await fetch(`/api/price?token=${encodeURIComponent(tokenId)}`); return r.json() as Promise<{p0:number; pLive:number; pClose:number; ts:string; changePct?:number; source?:'dexscreener'|'fallback'}> }
@@ -392,6 +398,41 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
 
   useEffect(()=>{ const id=setInterval(()=>setNow(Date.now()), 4000); return ()=>clearInterval(id) },[])
 
+  // UTC 00:00'da otomatik round geçişi
+  useEffect(() => {
+    if (!mounted || !stateLoaded) return
+
+    let intervalId: NodeJS.Timeout | null = null
+
+    const checkAndSettle = async () => {
+      const today = utcDayKey()
+      const lastSettled = localStorage.getItem('flipflop-last-settled-day')
+      
+      // Eğer bugün henüz settle edilmediyse ve active round varsa, settle et
+      if (lastSettled !== today && active.length > 0) {
+        console.log('🔄 [AUTO-SETTLE] UTC 00:00 detected, settling round...')
+        await simulateNewDay()
+        localStorage.setItem('flipflop-last-settled-day', today)
+      }
+    }
+
+    // İlk kontrol
+    checkAndSettle()
+
+    // UTC 00:00'a kadar bekle, sonra her gün tekrarla
+    const msUntilMidnight = msUntilNextUtcMidnight()
+    const timeoutId = setTimeout(() => {
+      checkAndSettle()
+      // Her 24 saatte bir kontrol et
+      intervalId = setInterval(checkAndSettle, 24 * 60 * 60 * 1000)
+    }, msUntilMidnight)
+
+    return () => {
+      clearTimeout(timeoutId)
+      if (intervalId) clearInterval(intervalId)
+    }
+  }, [mounted, stateLoaded, active.length])
+
   // CRITICAL: Force load nextRound from localStorage IMMEDIATELY on mount
   // This runs BEFORE stateLoaded check to ensure data is never lost
   useEffect(() => {
@@ -504,33 +545,6 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
     return () => clearInterval(interval)
   }, [])
 
-  // Check for UTC 00:00 and automatically settle round
-  useEffect(() => {
-    function checkUTCMidnight() {
-      const now = new Date()
-      const utcHours = now.getUTCHours()
-      const utcMinutes = now.getUTCMinutes()
-      const utcSeconds = now.getUTCSeconds()
-      
-      // Check if we just passed UTC 00:00 (within last 10 seconds)
-      if (utcHours === 0 && utcMinutes === 0 && utcSeconds < 10) {
-        // Check if we haven't already settled today
-        const todayKey = utcDayKey(now)
-        const lastSettled = localStorage.getItem('flipflop-last-settled-day')
-        if (lastSettled !== todayKey && active.length > 0) {
-          localStorage.setItem('flipflop-last-settled-day', todayKey)
-          // Use setTimeout to avoid calling simulateNewDay during render
-          setTimeout(() => {
-            simulateNewDay()
-          }, 100)
-        }
-      }
-    }
-    
-    checkUTCMidnight()
-    const interval = setInterval(checkUTCMidnight, 5000) // Check every 5 seconds
-    return () => clearInterval(interval)
-  }, [active, prices])
 
   // Boost countdown timer
   // Persist points
@@ -1093,16 +1107,35 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
 
   async function simulateNewDay() {
     // For locked cards, use locked points. For unlocked cards, calculate using UTC 00:00 snapshot
-    // First, update pClose to current price for unlocked cards (this is the UTC 00:00 snapshot)
+    // First, fetch fresh prices for all active tokens at UTC 00:00
+    const pricePromises = active
+      .filter(pick => pick && !pick.locked)
+      .map(async (pick) => {
+        try {
+          const priceData = await getPrice(pick.tokenId)
+          return { tokenId: pick.tokenId, priceData }
+        } catch (e) {
+          console.error(`Failed to fetch price for ${pick.tokenId}:`, e)
+          return null
+        }
+      })
+    
+    const freshPrices = await Promise.all(pricePromises)
+    
+    // Update pClose to UTC 00:00 prices for unlocked cards
     setPrices(prev => {
       const next: Record<string,{p0:number;pLive:number;pClose:number;changePct?:number;source?:'dexscreener'|'fallback'}> = { ...prev }
-      // Update pClose for all active tokens to current live price (UTC 00:00 snapshot)
-      for (const pick of active) {
-        if (pick && !pick.locked && next[pick.tokenId]) {
-          // For unlocked cards, pClose should be the current price at UTC 00:00
-          next[pick.tokenId] = {
-            ...next[pick.tokenId],
-            pClose: next[pick.tokenId].pLive // Use current live price as close price for unlocked cards
+      for (const result of freshPrices) {
+        if (result && result.priceData) {
+          const { tokenId, priceData } = result
+          if (next[tokenId]) {
+            // Update pClose to current price at UTC 00:00 (24h change is calculated from p0 to pClose)
+            next[tokenId] = {
+              ...next[tokenId],
+              pClose: priceData.pLive, // UTC 00:00 snapshot price
+              pLive: priceData.pLive, // Also update live price
+              changePct: priceData.changePct // Update 24h change percentage
+            }
           }
         }
       }
@@ -1110,7 +1143,7 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
     })
     
     // Wait a bit for state to update, then calculate results
-    await new Promise(resolve => setTimeout(resolve, 100))
+    await new Promise(resolve => setTimeout(resolve, 200))
     
     // Calculate round results before moving to next round
     const roundResults = calculateRoundResults()
