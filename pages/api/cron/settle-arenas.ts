@@ -10,13 +10,16 @@ function utcDayKey(d: Date = new Date()): string {
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
 
-  // ❗ Vercel Cron GET ile çalışır → GET + POST kabul edilmeli
+  // Vercel Cron uses GET → allow GET + POST
   if (req.method !== 'GET' && req.method !== 'POST') {
     return res.status(405).json({ ok: false, error: 'Method not allowed' })
   }
 
-  // ❗ Production ortamında sadece Vercel Cron tetiklesin
-  if (process.env.NODE_ENV === 'production') {
+  // Allow manual browser testing: ?test=1
+  const isTestMode = req.query.test === '1'
+
+  // Only allow Vercel Cron in production (except manual test)
+  if (process.env.NODE_ENV === 'production' && !isTestMode) {
     const isCron = !!req.headers['x-vercel-cron']
     if (!isCron) {
       return res.status(401).json({ ok: false, error: 'Unauthorized (Not from Vercel Cron)' })
@@ -27,48 +30,39 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const today = utcDayKey()
     const now = new Date()
     console.log(`🔄 [CRON-SETTLE-ARENAS] Starting arena settlement for ${today}`)
-    
+
     const duels = await loadDuels()
     const settledRooms: string[] = []
     const errors: Array<{ roomId: string; error: string }> = []
-    
-    // Process each room
+
     for (const roomId in duels) {
       const room = duels[roomId]
-      
-      // Skip if already settled or cancelled
-      if (room.status === 'settled' || room.status === 'cancelled') {
-        continue
-      }
-      
-      // Skip if evalAt hasn't been reached yet
+
+      if (room.status === 'settled' || room.status === 'cancelled') continue
+
       const evalAt = new Date(room.evalAt)
-      if (now.getTime() < evalAt.getTime()) {
-        continue
-      }
-      
-      // If evalAt has passed, attempt settlement
+      if (now.getTime() < evalAt.getTime()) continue
+
       try {
-        console.log(`🔄 [CRON-SETTLE-ARENAS] Settling room ${roomId} (evalAt: ${room.evalAt})`)
-        
+        console.log(`🔄 Settling room ${roomId} (evalAt: ${room.evalAt})`)
+
         await settleRoom(roomId)
-        
+
         settledRooms.push(roomId)
-        console.log(`✅ [CRON-SETTLE-ARENAS] Settled room ${roomId}`)
+        console.log(`✅ Settled room ${roomId}`)
       } catch (e: any) {
-        // Room not ready error — skip gracefully
         if (e?.message?.includes('Evaluation time not reached')) {
-          console.log(`⏭️ [CRON-SETTLE-ARENAS] Room ${roomId} not ready: ${e.message}`)
+          console.log(`⏭️ Room ${roomId} not ready: ${e.message}`)
           continue
         }
-        
-        console.error(`❌ [CRON-SETTLE-ARENAS] Failed to settle room ${roomId}:`, e)
+
+        console.error(`❌ Failed to settle room ${roomId}:`, e)
         errors.push({ roomId, error: e?.message || 'Unknown error' })
       }
     }
-    
-    console.log(`✅ [CRON-SETTLE-ARENAS] Settlement complete: ${settledRooms.length} rooms settled, ${errors.length} errors`)
-    
+
+    console.log(`✅ Arena settlement done: ${settledRooms.length} rooms settled, ${errors.length} errors`)
+
     return res.status(200).json({
       ok: true,
       date: today,
