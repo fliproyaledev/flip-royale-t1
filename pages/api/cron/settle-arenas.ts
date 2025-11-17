@@ -9,22 +9,20 @@ function utcDayKey(d: Date = new Date()): string {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Only allow POST requests
-  if (req.method !== 'POST') {
+
+  // ❗ Vercel Cron GET ile çalışır → GET + POST kabul edilmeli
+  if (req.method !== 'GET' && req.method !== 'POST') {
     return res.status(405).json({ ok: false, error: 'Method not allowed' })
   }
-  
-  // Optional: Add authentication/authorization check for cron jobs
-  // For Vercel Cron, you can check the Authorization header
-  const authHeader = req.headers.authorization
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    // In production, Vercel Cron automatically adds this header
-    // For local testing, you can set CRON_SECRET env variable
-    if (process.env.NODE_ENV === 'production' && !authHeader) {
-      return res.status(401).json({ ok: false, error: 'Unauthorized' })
+
+  // ❗ Production ortamında sadece Vercel Cron tetiklesin
+  if (process.env.NODE_ENV === 'production') {
+    const isCron = !!req.headers['x-vercel-cron']
+    if (!isCron) {
+      return res.status(401).json({ ok: false, error: 'Unauthorized (Not from Vercel Cron)' })
     }
   }
-  
+
   try {
     const today = utcDayKey()
     const now = new Date()
@@ -49,34 +47,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         continue
       }
       
-      // Check if room is ready to settle
-      // Room can be settled if:
-      // 1. evalAt time has passed (UTC 00:00 reached)
-      // 2. Both players have locked (if guest exists) OR only host exists
-      const hasGuest = !!room.guest
-      const bothLocked = room.host.locked && (hasGuest ? room.guest.locked : true)
-      
-      // If evalAt has passed, settle regardless of lock status
-      // (This ensures rooms are settled at UTC 00:00 even if players didn't lock)
-      if (now.getTime() >= evalAt.getTime()) {
-        try {
-          console.log(`🔄 [CRON-SETTLE-ARENAS] Settling room ${roomId} (evalAt: ${room.evalAt})`)
-          
-          // settleRoom will handle the settlement logic
-          await settleRoom(roomId)
-          
-          settledRooms.push(roomId)
-          console.log(`✅ [CRON-SETTLE-ARENAS] Settled room ${roomId}`)
-        } catch (e: any) {
-          // If room can't be settled (e.g., evalAt not reached), skip it
-          if (e?.message?.includes('Evaluation time not reached')) {
-            console.log(`⏭️ [CRON-SETTLE-ARENAS] Room ${roomId} not ready yet: ${e.message}`)
-            continue
-          }
-          
-          console.error(`❌ [CRON-SETTLE-ARENAS] Failed to settle room ${roomId}:`, e)
-          errors.push({ roomId, error: e?.message || 'Unknown error' })
+      // If evalAt has passed, attempt settlement
+      try {
+        console.log(`🔄 [CRON-SETTLE-ARENAS] Settling room ${roomId} (evalAt: ${room.evalAt})`)
+        
+        await settleRoom(roomId)
+        
+        settledRooms.push(roomId)
+        console.log(`✅ [CRON-SETTLE-ARENAS] Settled room ${roomId}`)
+      } catch (e: any) {
+        // Room not ready error — skip gracefully
+        if (e?.message?.includes('Evaluation time not reached')) {
+          console.log(`⏭️ [CRON-SETTLE-ARENAS] Room ${roomId} not ready: ${e.message}`)
+          continue
         }
+        
+        console.error(`❌ [CRON-SETTLE-ARENAS] Failed to settle room ${roomId}:`, e)
+        errors.push({ roomId, error: e?.message || 'Unknown error' })
       }
     }
     
@@ -94,4 +81,3 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(500).json({ ok: false, error: e?.message || 'Internal server error' })
   }
 }
-
