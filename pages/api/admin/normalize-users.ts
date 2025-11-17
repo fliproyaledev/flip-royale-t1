@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { loadUsersKV, saveUsersKV } from '@/lib/kv'
+import { loadUsersKV, saveUsersKV } from '../../../lib/kv'
 
 const ADMIN_KEY = process.env.ADMIN_KEY || "superadmin123"
 
@@ -23,9 +23,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       if (!user.createdAt) user.createdAt = new Date().toISOString()
       if (!user.updatedAt) user.updatedAt = new Date().toISOString()
+
       if (typeof user.totalPoints !== "number") user.totalPoints = 0
       if (typeof user.bankPoints !== "number") user.bankPoints = 0
       if (typeof user.giftPoints !== "number") user.giftPoints = 0
+
       if (!Array.isArray(user.logs)) user.logs = []
 
       if (!user.activeRound) user.activeRound = []
