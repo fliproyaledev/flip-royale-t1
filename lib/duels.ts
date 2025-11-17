@@ -5,7 +5,7 @@ import type { Token } from './tokens'
 import type { DexscreenerPairRef, DexscreenerQuote } from './dexscreener'
 import { getDexPairQuote, findDexPairForToken } from './dexscreener'
 import { getGeckoPoolQuote } from './gecko'
-import { getOrCreateUser, loadUsers, saveUsers, creditBank, creditGamePoints, debitBank, loadUsersSync, saveUsersSync } from './users'
+import { getOrCreateUser, loadUsers, saveUsers, creditGamePoints, debitBank, loadUsersSync, saveUsersSync } from './users'
 import { loadDuelsKV, saveDuelsKV } from './kv'
 
 export type DuelPickInput = { tokenId: string; direction: 'up' | 'down' }
