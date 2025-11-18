@@ -30,7 +30,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   user.nextRound[slot] = {
     tokenId: String(token),
-    dir: String(dir).toUpperCase(),
+dir: (String(dir).toUpperCase() as "UP" | "DOWN"),
     duplicateIndex,
     locked: false,
   }
