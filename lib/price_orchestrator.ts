@@ -1,3 +1,5 @@
+// lib/price_orchestrator.ts
+
 import { TOKEN_MAP, buildDexscreenerViewUrl, parseDexscreenerLink } from './tokens'
 import type { Token } from './tokens'
 import type { DexscreenerPairRef, DexscreenerQuote } from './dexscreener'
@@ -10,7 +12,7 @@ export type CachedPrice = {
   pLive: number
   p0: number
   changePct?: number
-  fdv?: number // Fully Diluted Valuation in USD
+  fdv?: number
   ts: string
   source: 'dexscreener' | 'gecko'
   dexNetwork: string
@@ -35,13 +37,24 @@ function deriveBaseline(currentPrice: number, changePct?: number): number {
 
 function getExplicitPair(token: Token): PairSpec | null {
   const network = (token.dexscreenerNetwork || 'base').toLowerCase()
+
   let pair = (token.dexscreenerPair || '').toLowerCase()
+
   if (!pair) {
     const parsed = parseDexscreenerLink(token.dexscreenerUrl)
-    if (parsed.pair) pair = parsed.pair.toLowerCase()
+    if (parsed.pair) {
+      pair = parsed.pair.toLowerCase()
+    }
   }
+
   if (!pair) return null
-  return { tokenId: token.id, symbol: token.symbol, network, pair }
+
+  return {
+    tokenId: token.id,
+    symbol: token.symbol,
+    network,
+    pair
+  }
 }
 
 class PriceOrchestrator {
@@ -54,15 +67,19 @@ class PriceOrchestrator {
   start() {
     if (this.started) return
     this.started = true
+
     const envMs = Number(process.env.PRICE_POLL_INTERVAL_MS || NaN)
     if (Number.isFinite(envMs) && envMs >= 15_000) {
       this.intervalMs = Math.floor(envMs)
     }
+
     this.pairs = Object.values(TOKEN_MAP)
       .map(getExplicitPair)
       .filter((x): x is PairSpec => !!x)
-    // Immediate prewarm
+
+    // Warm-up
     this.poll().catch(() => {})
+
     // Continuous polling
     this.interval = setInterval(() => {
       this.poll().catch(() => {})
@@ -84,7 +101,6 @@ class PriceOrchestrator {
   }
 
   private async poll(): Promise<void> {
-    // Poll sequentially to be gentle with providers; our Dex lib already batches internally.
     for (const spec of this.pairs) {
       await this.pollOne(spec)
     }
@@ -92,7 +108,8 @@ class PriceOrchestrator {
 
   private async pollOne(spec: PairSpec): Promise<void> {
     const { tokenId, symbol, network, pair } = spec
-    // Dexscreener strict
+
+    // Dexscreener (Strict)
     const dex: DexscreenerQuote | null = await getDexPairQuoteStrict(network, pair)
     if (dex) {
       const baseline = deriveBaseline(dex.priceUsd, dex.changePct)
@@ -112,7 +129,8 @@ class PriceOrchestrator {
       this.cache.set(tokenId, entry)
       return
     }
-    // GeckoTerminal exact pair
+
+    // Gecko fallback
     const gecko = await getGeckoPoolQuote(network, pair, symbol)
     if (gecko) {
       const baseline = deriveBaseline(gecko.priceUsd, gecko.changePct)
@@ -131,18 +149,19 @@ class PriceOrchestrator {
       this.cache.set(tokenId, entry)
       return
     }
-    // If both fail, keep last known value (no overwrite)
+
+    // If both fail → keep last cached value
   }
 }
 
 const globalAny = globalThis as any
+
 export function ensurePriceOrchestrator(): PriceOrchestrator {
   if (!globalAny.__flipflopPriceOrchestrator) {
     globalAny.__flipflopPriceOrchestrator = new PriceOrchestrator()
   }
+
   const inst: PriceOrchestrator = globalAny.__flipflopPriceOrchestrator
   inst.start()
   return inst
 }
-
-
