@@ -7,6 +7,9 @@
 let kv: any = null
 try {
   // Try to import @vercel/kv - will fail if not installed (local dev)
+  // NOT used when KV_REST_API_URL + KV_REST_API_TOKEN aktifse (Upstash/Vercel KV REST)
+  // sadece KV_URL kullanırsan devreye girer.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const kvModule = require('@vercel/kv')
   kv = kvModule.kv
 } catch {
@@ -19,27 +22,41 @@ const memoryStore = new Map<string, string>()
 
 async function getKV(key: string): Promise<string | null> {
   try {
-    // Check if REST API is configured (Vercel KV or Upstash)
+    // ✅ Öncelik: REST API (Upstash / Vercel KV)
     if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-      // Upstash/Vercel KV REST API format: POST with command array
       const response = await fetch(process.env.KV_REST_API_URL, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${process.env.KV_REST_API_TOKEN}`,
-          'Content-Type': 'application/json'
+          Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
+          'Content-Type': 'application/json',
+          // 🔴 ÖNEMLİ: Upstash için Accept: application/json HEADER'I
+          Accept: 'application/json'
         },
         body: JSON.stringify(['GET', key])
       })
-      if (!response.ok) throw new Error(`KV REST API error: ${response.status}`)
+
+      if (!response.ok) {
+        throw new Error(`KV REST API error: ${response.status}`)
+      }
+
       const data = await response.json()
-      // Upstash returns { result: value }, Vercel KV might return value directly
-      return data.result !== undefined ? data.result : (data || null)
+
+      // Upstash tipik cevap: { result: value }
+      // Bazı KV'ler direkt value döndürebilir
+      if (data === null || data === undefined) return null
+      if (typeof data === 'object' && 'result' in data) {
+        return (data as any).result ?? null
+      }
+      return data as string
     }
-    // Fallback: Try native KV if KV_URL is available
+
+    // ✅ İkinci tercih: native KV client (KV_URL + @vercel/kv)
     if (process.env.KV_URL && kv) {
-      return await kv.get(key)
+      const value = await kv.get<string | null>(key)
+      return value ?? null
     }
-    // Fallback to memory for local dev
+
+    // ✅ Son tercih: local memory (dev için)
     return memoryStore.get(key) || null
   } catch (err) {
     console.warn(`KV get error for key ${key}, using memory fallback:`, err)
@@ -49,26 +66,31 @@ async function getKV(key: string): Promise<string | null> {
 
 async function setKV(key: string, value: string): Promise<void> {
   try {
-    // Check if REST API is configured (Vercel KV or Upstash)
+    // ✅ REST API (Upstash/Vercel KV)
     if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-      // Upstash/Vercel KV REST API format: POST with command array
       const response = await fetch(process.env.KV_REST_API_URL, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${process.env.KV_REST_API_TOKEN}`,
-          'Content-Type': 'application/json'
+          Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json'
         },
         body: JSON.stringify(['SET', key, value])
       })
-      if (!response.ok) throw new Error(`KV REST API error: ${response.status}`)
+
+      if (!response.ok) {
+        throw new Error(`KV REST API error: ${response.status}`)
+      }
       return
     }
-    // Fallback: Try native KV if KV_URL is available
+
+    // ✅ Native KV client
     if (process.env.KV_URL && kv) {
       await kv.set(key, value)
       return
     }
-    // Fallback to memory for local dev
+
+    // ✅ Local dev memory
     memoryStore.set(key, value)
   } catch (err) {
     console.warn(`KV set error for key ${key}, using memory fallback:`, err)
@@ -78,25 +100,31 @@ async function setKV(key: string, value: string): Promise<void> {
 
 async function delKV(key: string): Promise<void> {
   try {
-    // Check if REST API is configured (Vercel KV or Upstash)
+    // ✅ REST API (Upstash/Vercel KV)
     if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-      // Upstash/Vercel KV REST API format: POST with command array
       const response = await fetch(process.env.KV_REST_API_URL, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${process.env.KV_REST_API_TOKEN}`,
-          'Content-Type': 'application/json'
+          Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json'
         },
         body: JSON.stringify(['DEL', key])
       })
-      if (!response.ok) throw new Error(`KV REST API error: ${response.status}`)
+
+      if (!response.ok) {
+        throw new Error(`KV REST API error: ${response.status}`)
+      }
       return
     }
-    // Fallback: Try native KV if KV_URL is available
+
+    // ✅ Native KV client
     if (process.env.KV_URL && kv) {
       await kv.del(key)
       return
     }
+
+    // ✅ Local memory
     memoryStore.delete(key)
   } catch (err) {
     console.warn(`KV del error for key ${key}, using memory fallback:`, err)
@@ -108,7 +136,7 @@ async function delKV(key: string): Promise<void> {
 const KEYS = {
   users: 'fliproyale:users',
   duels: 'fliproyale:duels',
-  rounds: 'fliproyale:rounds',
+  rounds: 'fliproyale:rounds'
 } as const
 
 export async function loadUsersKV(): Promise<Record<string, any>> {
@@ -155,4 +183,3 @@ export async function loadRoundsKV(): Promise<any[]> {
 export async function saveRoundsKV(data: any[]): Promise<void> {
   await setKV(KEYS.rounds, JSON.stringify(data, null, 2))
 }
-
