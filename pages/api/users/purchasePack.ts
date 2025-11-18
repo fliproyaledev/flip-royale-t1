@@ -1,64 +1,51 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { getUser, saveUser } from "../../../lib/users";
+import { 
+  loadUsers, 
+  saveUsers, 
+  getOrCreateUser, 
+  debitBank 
+} from "../../../lib/users";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    const id = String(req.query.id || "");
-    let packs = Number(req.query.packs || 1);
+    const userId = String(req.query.user || "").trim();
+    const packCount = Number(req.query.count || 1);
 
-    if (!id) return res.status(400).json({ ok: false, error: "Missing id" });
-    if (packs <= 0) packs = 1;
-
-    const PACK_COST = 5000;
-    const totalCost = PACK_COST * packs;
-
-    const user = await getUser(id);
-    if (!user) return res.status(404).json({ ok: false, error: "User not found" });
-
-    let { bankPoints, giftPoints } = user;
-
-    // ---- STEP 1: GIFT POINTS HARCA ----
-    let remainingCost = totalCost;
-
-    if (giftPoints > 0) {
-      const useGift = Math.min(giftPoints, remainingCost);
-      giftPoints -= useGift;
-      remainingCost -= useGift;
+    if (!userId) {
+      return res.status(400).json({ ok: false, error: "Missing user" });
+    }
+    if (!Number.isFinite(packCount) || packCount < 1) {
+      return res.status(400).json({ ok: false, error: "Invalid count" });
     }
 
-    // ---- STEP 2: BANK POINTS HARCA (gerekirse) ----
-    if (remainingCost > 0) {
-      if (bankPoints < remainingCost) {
-        return res.status(400).json({
-          ok: false,
-          error: "Not enough points"
-        });
-      }
-      bankPoints -= remainingCost;
-    }
+    // Load map
+    const users = await loadUsers();
 
-    // ---- STEP 3: Kullanıcının puanlarını güncelle ----
-    user.giftPoints = giftPoints;
-    user.bankPoints = bankPoints;
+    // Load or create user
+    const user = getOrCreateUser(users, userId);
 
-    // totalPoints = bankPoints (UI için)
-    user.totalPoints = bankPoints;
+    // PACK COST = 5000 per pack
+    const cost = packCount * 5000;
 
-    // Yeni kart eklemeyi burada yapabilirsiniz (zaten vardı)
+    // Payment uses debitBank → spends giftPoints first (correct)
+    debitBank(user, cost, `purchase-pack-${packCount}`);
 
-    await saveUser(user);
+    user.updatedAt = new Date().toISOString();
+
+    await saveUsers(users);
 
     return res.json({
       ok: true,
-      message: "Pack purchased successfully",
-      cost: totalCost,
-      giftPoints,
-      bankPoints,
-      totalPoints: user.totalPoints,
+      user: {
+        id: user.id,
+        bankPoints: user.bankPoints,
+        giftPoints: user.giftPoints,
+        totalPoints: user.totalPoints,
+      }
     });
 
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ ok: false, error: "Server error" });
+  } catch (err: any) {
+    console.error("purchasePack error:", err);
+    return res.status(500).json({ ok: false, error: err.message });
   }
 }
