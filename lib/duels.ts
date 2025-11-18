@@ -213,19 +213,6 @@ export async function joinRoom(roomId: string, userId: string) {
 
   const users = await loadUsers()
 
-  // Fill system bot slot
-  if (room.host.userId === SYSTEM_USER_ID && !room.guest) {
-    const user = getOrCreateUser(users, userId)
-    if (user.bankPoints < room.entryCost) throw new Error('Insufficient points')
-    debitBank(user, room.entryCost, `duel-entry-${room.id}`, room.baseDay)
-
-    room.host = { userId, entryPaid: true, locked: false, picks: [] }
-    map[roomId] = room
-    await saveUsers(users)
-    await saveDuels(map)
-    return { room, users }
-  }
-
   if (room.host.userId === userId) throw new Error('Host cannot join own room')
 
   const guest = getOrCreateUser(users, userId)
@@ -465,43 +452,34 @@ export async function cancelRoom(roomId: string, userId: string) {
 }
 
 // ---------------------
-// SEED ROOMS
+// CLEANUP LEGACY ROOMS
 // ---------------------
-export async function seedDailyRooms(count = 25, entryCost = 2500) {
+export async function seedDailyRooms() {
   const map = await loadDuels()
-  const date = todayIsoDate()
-
-  const kept: Record<string, DuelRoom> = {}
-  const today: Record<string, DuelRoom> = {}
+  const today = todayIsoDate()
+  let changed = false
 
   for (const [id, room] of Object.entries(map)) {
-    if (room.baseDay === date) today[id] = room
-    else if (room.status === 'settled' || room.status === 'cancelled')
-      kept[id] = room
-  }
+    if (!room) continue
 
-  const need = Math.max(0, count - Object.keys(today).length)
-  const now = new Date()
+    // Remove legacy auto-seeded rooms (system host, never filled)
+    if (room.host?.userId === SYSTEM_USER_ID && !room.guest && !room.host.entryPaid) {
+      delete map[id]
+      changed = true
+      continue
+    }
 
-  for (let i = 0; i < need; i++) {
-    const seq = Object.keys(today).length + 1 + i
-    const id = `duel_${date.replace(/-/g, '')}_${seq}`
-
-    today[id] = {
-      id,
-      createdAt: now.toISOString(),
-      baseDay: date,
-      evalAt: nextMidnightIso(now),
-      entryCost,
-      status: 'open',
-      host: { userId: SYSTEM_USER_ID, entryPaid: false, locked: false, picks: [] },
-      seq
+    // Cancel stale rooms from previous days that never settled properly
+    if (
+      room.baseDay !== today &&
+      (room.status === 'open' || room.status === 'ready' || room.status === 'locked')
+    ) {
+      room.status = 'cancelled'
+      changed = true
     }
   }
 
-  const sorted = Object.values(today).sort((a, b) => (a.seq! - b.seq!))
-  const finalToday: Record<string, DuelRoom> = {}
-  sorted.forEach(r => (finalToday[r.id] = r))
-
-  await saveDuels({ ...finalToday, ...kept })
+  if (changed) {
+    await saveDuels(map)
+  }
 }
