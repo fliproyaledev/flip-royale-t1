@@ -2,11 +2,14 @@ import fs from 'fs'
 import path from 'path'
 import { loadUsersKV, saveUsersKV } from './kv'
 
-// Vercel production ortamını tespit et
 const IS_VERCEL = !!process.env.VERCEL
 
+// ─────────────────────────────────────────────────────────────
+// TYPES
+// ─────────────────────────────────────────────────────────────
+
 export type LogEntry = {
-  date: string // ISO date (YYYY-MM-DD)
+  date: string       // YYYY-MM-DD
   type: 'daily' | 'duel' | 'system'
   dailyDelta?: number
   bonusGranted?: number
@@ -26,93 +29,124 @@ export type UserRecord = {
   id: string
   name?: string
   avatar?: string
-  walletAddress?: string // Wallet address for wallet connection
+  walletAddress?: string
 
-  totalPoints: number // leaderboard points (never decreased, excludes gift points)
-  bankPoints: number  // spendable points for Arena (includes gift points)
-  giftPoints: number  // initial gift points (not counted in leaderboard)
+  totalPoints: number
+  bankPoints: number
+  giftPoints: number
 
   logs: LogEntry[]
-  createdAt?: string // Registration timestamp
+  createdAt?: string
   updatedAt: string
 
-  // Flip Royale round data (server-side storage)
-  activeRound?: RoundPick[]      // Current active round picks
-  nextRound?: RoundPick[]        // Next round picks (saved)
-  currentRound?: number          // Current round number
-  lastSettledDay?: string        // Last day when round was settled (YYYY-MM-DD)
+  activeRound?: RoundPick[]
+  nextRound?: RoundPick[]
+  currentRound?: number
+  lastSettledDay?: string
 }
+
+// ─────────────────────────────────────────────────────────────
+// FILE FALLBACK PATHS
+// ─────────────────────────────────────────────────────────────
 
 const DATA_DIR = path.join(process.cwd(), 'data')
 const USERS_FILE = path.join(DATA_DIR, 'users.json')
 
 function ensureDir() {
-  // Vercel'de dosya yazmayacağız, o yüzden klasör yaratmaya gerek yok
+  if (IS_VERCEL) return
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true })
+}
+
+// ─────────────────────────────────────────────────────────────
+// LOAD USERS
+// ─────────────────────────────────────────────────────────────
+
+export async function loadUsers(): Promise<Record<string, UserRecord>> {
+  // 1. Try KV
+  try {
+    const kv = await loadUsersKV()
+    if (kv && typeof kv === 'object' && Object.keys(kv).length > 0) {
+      return kv as Record<string, UserRecord>
+    }
+  } catch (e) {
+    console.warn('KV load failed:', e)
+  }
+
+  // 2. Fallback JSON (local)
+  try {
+    ensureDir()
+    if (!fs.existsSync(USERS_FILE)) return {}
+
+    const raw = fs.readFileSync(USERS_FILE, 'utf8')
+    const json = JSON.parse(raw)
+
+    if (json && typeof json === 'object') {
+      // Attempt KV sync
+      try { await saveUsersKV(json) } catch {}
+      return json as Record<string, UserRecord>
+    }
+  } catch {}
+
+  return {}
+}
+
+// ─────────────────────────────────────────────────────────────
+// SAVE USERS
+// ─────────────────────────────────────────────────────────────
+
+export async function saveUsers(map: Record<string, UserRecord>): Promise<void> {
+  // KV is primary
+  try {
+    await saveUsersKV(map)
+  } catch (err) {
+    console.warn('KV save failed:', err)
+  }
+
+  // VERCEL = no file writes
   if (IS_VERCEL) return
 
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true })
+  try {
+    ensureDir()
+    fs.writeFileSync(USERS_FILE, JSON.stringify(map, null, 2), 'utf8')
+  } catch (err) {
+    console.warn('JSON write failed:', err)
   }
 }
 
-// Try KV first, fallback to JSON file for backward compatibility (local dev)
-export async function loadUsers(): Promise<Record<string, UserRecord>> {
-  try {
-    // Try KV (Vercel production)
-    const kvData = await loadUsersKV()
-    if (kvData && Object.keys(kvData).length > 0) {
-      return kvData as Record<string, UserRecord>
-    }
-  } catch (err) {
-    console.warn('KV load failed, trying JSON fallback:', err)
-  }
+// ─────────────────────────────────────────────────────────────
+// SYNC LOAD/SAVE (LOCAL DEV)
+// ─────────────────────────────────────────────────────────────
 
-  // Production'da KV boşsa, JSON fallback kullanmak istemiyorsak buradan direkt {} dönebiliriz.
-  // Ama JSON'dan okumak Vercel'de serbest (sadece yazmak yasak), o yüzden bırakıyorum.
+export function loadUsersSync(): Record<string, UserRecord> {
+  if (IS_VERCEL) return {}
+
   try {
     ensureDir()
     if (!fs.existsSync(USERS_FILE)) return {}
     const raw = fs.readFileSync(USERS_FILE, 'utf8')
-    const json = JSON.parse(raw)
-    if (json && typeof json === 'object') {
-      // Migrate to KV if KV is available
-      try {
-        await saveUsersKV(json)
-      } catch {}
-      return json as Record<string, UserRecord>
-    }
-    return {}
+    return JSON.parse(raw)
   } catch {
     return {}
   }
 }
 
-export async function saveUsers(map: Record<string, UserRecord>): Promise<void> {
-  try {
-    // Save to KV (Vercel production)
-    await saveUsersKV(map)
-  } catch (err) {
-    console.warn('KV save failed, trying JSON fallback:', err)
-  }
-
-  // Vercel production'da JSON'a yazmak yasak → EROFS hatası veriyor
+export function saveUsersSync(map: Record<string, UserRecord>): void {
   if (IS_VERCEL) {
+    saveUsersKV(map).catch(() => {})
     return
   }
 
-  // Also save to JSON file for backup/local dev
-  try {
-    ensureDir()
-    fs.writeFileSync(USERS_FILE, JSON.stringify(map, null, 2), 'utf8')
-  } catch (err) {
-    console.warn('JSON save failed:', err)
-  }
+  ensureDir()
+  fs.writeFileSync(USERS_FILE, JSON.stringify(map, null, 2), 'utf8')
+  saveUsersKV(map).catch(() => {})
 }
 
-// Güvenli user oluşturma / getirme
+// ─────────────────────────────────────────────────────────────
+// CREATE OR REPAIR USER
+// ─────────────────────────────────────────────────────────────
+
 export function getOrCreateUser(map: Record<string, UserRecord>, userId: string): UserRecord {
-  // Invalid ID’leri tamamen blokla
-  if (!userId || userId === 'undefined' || userId.trim() === '') {
+  if (!userId || userId.trim() === '' || userId === 'undefined') {
     throw new Error(`Invalid userId: "${userId}"`)
   }
 
@@ -120,160 +154,128 @@ export function getOrCreateUser(map: Record<string, UserRecord>, userId: string)
 
   if (!user) {
     const now = new Date().toISOString()
-    // Yeni kayıt: 10.000 gift + 10.000 bank
     user = {
       id: userId,
       totalPoints: 0,
       bankPoints: 10000,
       giftPoints: 10000,
-      logs: [
-        {
-          type: 'system',
-          date: now.slice(0, 10),
-          bonusGranted: 10000,
-          note: 'user-registered'
-        }
-      ],
+      logs: [{
+        type: 'system',
+        date: now.slice(0, 10),
+        bonusGranted: 10000,
+        note: 'user-registered'
+      }],
       createdAt: now,
       updatedAt: now,
       activeRound: [],
       nextRound: Array(5).fill(null) as any,
-      currentRound: 1,
-      // lastSettledDay undefined başlasın
+      currentRound: 1
     }
     map[userId] = user
   }
 
-  // Eski kayıtları otomatik tamir et
+  // Auto-repair old users
   if (!Array.isArray(user.logs)) user.logs = []
   if (typeof user.totalPoints !== 'number') user.totalPoints = 0
   if (typeof user.bankPoints !== 'number') user.bankPoints = 0
   if (typeof user.giftPoints !== 'number') user.giftPoints = 0
-  if (!user.activeRound) user.activeRound = []
-  if (!user.nextRound) user.nextRound = Array(5).fill(null) as any
+  if (!Array.isArray(user.activeRound)) user.activeRound = []
+  if (!Array.isArray(user.nextRound)) user.nextRound = Array(5).fill(null) as any
   if (!user.currentRound) user.currentRound = 1
 
   return user
 }
 
-// Sync version for backward compatibility (loads from JSON file)
-export function loadUsersSync(): Record<string, UserRecord> {
-  // Vercel'de sync KV olmadığı için, burada JSON okumaya çalışmak
-  // teorik olarak mümkün, ama dosya değişmeyecek.
-  // En güvenlisi: eğer KV'den normalize edip geçtiysek, burası
-  // sadece local development için kullanılsın.
-  if (IS_VERCEL) {
-    // Production'da bu sync fonksiyon çağrılırsa boş map ile başlayacağız,
-    // sonrasında saveUsersSync KV'ye yazacak.
-    return {}
-  }
-
-  try {
-    ensureDir()
-    if (!fs.existsSync(USERS_FILE)) return {}
-    const raw = fs.readFileSync(USERS_FILE, 'utf8')
-    const json = JSON.parse(raw)
-    return json && typeof json === 'object' ? (json as Record<string, UserRecord>) : {}
-  } catch {
-    return {}
-  }
-}
-
-export function saveUsersSync(map: Record<string, UserRecord>): void {
-  // Vercel production'da kesinlikle dosya yazma → direkt KV
-  if (IS_VERCEL) {
-    // Async KV save (fire and forget)
-    saveUsersKV(map).catch(() => {})
-    return
-  }
-
-  // Local dev: JSON + KV
-  ensureDir()
-  fs.writeFileSync(USERS_FILE, JSON.stringify(map, null, 2), 'utf8')
-  // Async KV save (fire and forget)
-  saveUsersKV(map).catch(() => {})
-}
+// ─────────────────────────────────────────────────────────────
+// POINT OPERATIONS
+// ─────────────────────────────────────────────────────────────
 
 export function applyDailyDelta(user: UserRecord, dateIso: string, delta: number, note?: string) {
   if (delta > 0) {
     user.totalPoints += delta
-    // Also credit spendable balance so points are usable in both modes
     user.bankPoints += delta
   }
-  user.logs.push({ type: 'daily', date: dateIso.slice(0, 10), dailyDelta: delta, note })
+
+  user.logs.push({
+    type: 'daily',
+    date: dateIso.slice(0, 10),
+    dailyDelta: delta,
+    note
+  })
   user.updatedAt = new Date().toISOString()
 }
 
 export function grantDailyBonus(user: UserRecord, dateIso: string, bonus: number, note?: string) {
   if (bonus > 0) {
     user.totalPoints += bonus
-    // Mirror to spendable balance for unified points
     user.bankPoints += bonus
+
     user.logs.push({
       type: 'daily',
       date: dateIso.slice(0, 10),
-      dailyDelta: 0,
       bonusGranted: bonus,
       note
     })
+
     user.updatedAt = new Date().toISOString()
   }
 }
 
 export function creditBank(user: UserRecord, amount: number, note?: string, dateIso?: string) {
   if (!Number.isFinite(amount)) return
+
   user.bankPoints += amount
+
   user.logs.push({
     type: 'system',
     date: dateIso || new Date().toISOString().slice(0, 10),
     bonusGranted: amount,
     note
   })
+
   user.updatedAt = new Date().toISOString()
 }
 
-// Credit game points (for leaderboard) - updates both totalPoints and bankPoints
-export function creditGamePoints(user: UserRecord, amount: number, note?: string, dateIso?: string) {
+// Oyun puanı → Liderboard + Bank
+export function creditGamePoints(
+  user: UserRecord,
+  amount: number,
+  note?: string,
+  dateIso?: string
+) {
   if (!Number.isFinite(amount)) return
-  // Only add positive amounts to totalPoints (leaderboard)
-  if (amount > 0) {
-    user.totalPoints += amount
-  }
-  // Always update bankPoints (spendable balance)
+
+  if (amount > 0) user.totalPoints += amount
   user.bankPoints += amount
+
   user.logs.push({
     type: 'system',
     date: dateIso || new Date().toISOString().slice(0, 10),
     dailyDelta: amount > 0 ? amount : 0,
     note
   })
+
   user.updatedAt = new Date().toISOString()
 }
 
 export function debitBank(user: UserRecord, amount: number, note?: string, dateIso?: string) {
   if (!Number.isFinite(amount)) return
 
-  // Spend gift points first, then normal points
-  const giftPointsToSpend = Math.min(amount, user.giftPoints || 0)
-  const remainingAmount = amount - giftPointsToSpend
+  // Spend gift first
+  let useGift = Math.min(amount, user.giftPoints)
+  user.giftPoints -= useGift
+  amount -= useGift
 
-  // Deduct gift points first
-  if (giftPointsToSpend > 0) {
-    user.giftPoints = Math.max(0, (user.giftPoints || 0) - giftPointsToSpend)
-    // Also deduct from bankPoints when gift points are spent
-    user.bankPoints = Math.max(0, user.bankPoints - giftPointsToSpend)
-  }
-
-  // Deduct remaining from bankPoints (normal points)
-  if (remainingAmount > 0) {
-    user.bankPoints = Math.max(0, user.bankPoints - remainingAmount)
+  // Spend from bank
+  if (amount > 0) {
+    user.bankPoints = Math.max(0, user.bankPoints - amount)
   }
 
   user.logs.push({
     type: 'system',
     date: dateIso || new Date().toISOString().slice(0, 10),
-    dailyDelta: 0,
     note
   })
+
   user.updatedAt = new Date().toISOString()
 }
