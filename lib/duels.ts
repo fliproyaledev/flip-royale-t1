@@ -173,9 +173,6 @@ export async function createRoom(userId: string, entryCost = 2500) {
   const map = await loadDuels()
   const date = todayIsoDate()
 
-  if (countRoomsForDate(map, date) >= 25)
-    throw new Error('Daily room cap reached')
-
   const id = `duel_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`
   const now = new Date()
 
