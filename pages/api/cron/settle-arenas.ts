@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { loadDuels, settleRoom } from '../../../lib/duels'
+import { loadDuels, saveDuels, settleRoom } from '../../../lib/duels'
 
 function utcDayKey(d: Date = new Date()): string {
   const y = d.getUTCFullYear()
@@ -10,58 +10,79 @@ function utcDayKey(d: Date = new Date()): string {
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
 
-  // Vercel Cron uses GET → allow GET + POST
+  // Allow GET + POST
   if (req.method !== 'GET' && req.method !== 'POST') {
     return res.status(405).json({ ok: false, error: 'Method not allowed' })
   }
 
-  // Allow manual browser testing: ?test=1
   const isTestMode = req.query.test === '1'
 
-  // Only allow Vercel Cron in production (except manual test)
+  // Protect cron in production
   if (process.env.NODE_ENV === 'production' && !isTestMode) {
-    const isCron = !!req.headers['x-vercel-cron']
-    if (!isCron) {
-      return res.status(401).json({ ok: false, error: 'Unauthorized (Not from Vercel Cron)' })
+    if (!req.headers['x-vercel-cron']) {
+      return res.status(401).json({ ok: false, error: 'Unauthorized (Not Vercel Cron)' })
     }
   }
 
   try {
     const today = utcDayKey()
     const now = new Date()
-    console.log(`🔄 [CRON-SETTLE-ARENAS] Starting arena settlement for ${today}`)
 
-    const duels = await loadDuels()
+    console.log(`🔄 [CRON-ARENAS] Starting arena settlement for ${today}`)
+
+    let duels = await loadDuels()
+
     const settledRooms: string[] = []
     const errors: Array<{ roomId: string; error: string }> = []
 
     for (const roomId in duels) {
       const room = duels[roomId]
 
+      // Skip deleted or broken rooms
+      if (!room || typeof room !== 'object') continue
+
+      // Skip rooms already settled or cancelled
       if (room.status === 'settled' || room.status === 'cancelled') continue
 
+      // Ensure evalAt exists
+      if (!room.evalAt) {
+        console.warn(`⚠️ Room ${roomId} missing evalAt → cancelling`)
+        room.status = 'cancelled'
+        continue
+      }
+
       const evalAt = new Date(room.evalAt)
+
+      // Not ready yet
       if (now.getTime() < evalAt.getTime()) continue
 
       try {
-        console.log(`🔄 Settling room ${roomId} (evalAt: ${room.evalAt})`)
+        console.log(`⚔️ Settling room ${roomId} (evalAt: ${room.evalAt})`)
 
+        // Main logic
         await settleRoom(roomId)
 
         settledRooms.push(roomId)
-        console.log(`✅ Settled room ${roomId}`)
+
+        console.log(`✅ Room settled: ${roomId}`)
+
       } catch (e: any) {
-        if (e?.message?.includes('Evaluation time not reached')) {
-          console.log(`⏭️ Room ${roomId} not ready: ${e.message}`)
+        const msg = e?.message || 'Unknown error'
+
+        if (msg.includes('Evaluation time not reached')) {
+          console.log(`⏭️ Room ${roomId} not ready: ${msg}`)
           continue
         }
 
-        console.error(`❌ Failed to settle room ${roomId}:`, e)
-        errors.push({ roomId, error: e?.message || 'Unknown error' })
+        console.error(`❌ Failed to settle room ${roomId}:`, msg)
+        errors.push({ roomId, error: msg })
       }
     }
 
-    console.log(`✅ Arena settlement done: ${settledRooms.length} rooms settled, ${errors.length} errors`)
+    // Save updated Duel state
+    await saveDuels(duels)
+
+    console.log(`🏁 Arena settlement finished → ${settledRooms.length} rooms settled`)
 
     return res.status(200).json({
       ok: true,
@@ -70,8 +91,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       settledRooms,
       errors
     })
+
   } catch (e: any) {
-    console.error('❌ [CRON-SETTLE-ARENAS] Fatal error:', e)
+    console.error('❌ [CRON-ARENAS] Fatal error:', e)
     return res.status(500).json({ ok: false, error: e?.message || 'Internal server error' })
   }
 }
