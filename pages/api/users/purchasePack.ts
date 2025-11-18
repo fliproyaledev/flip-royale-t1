@@ -1,58 +1,64 @@
-import type { NextApiRequest, NextApiResponse } from 'next'
-import { loadUsers, saveUsers, getOrCreateUser, debitBank } from '../../../lib/users'
-
-// Vercel için API route config
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: '1mb',
-    },
-  },
-}
+import type { NextApiRequest, NextApiResponse } from "next";
+import { getUser, saveUser } from "../../../lib/users";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Only allow POST method
-  if (req.method !== 'POST') {
-    res.setHeader('Allow', ['POST'])
-    return res.status(405).json({ ok: false, error: `Method ${req.method} not allowed` })
-  }
-
   try {
-    // Parse body - Vercel sometimes needs explicit parsing
-    let body = req.body
-    if (typeof body === 'string') {
-      try {
-        body = JSON.parse(body)
-      } catch (e) {
-        return res.status(400).json({ ok: false, error: 'Invalid JSON in request body' })
+    const id = String(req.query.id || "");
+    let packs = Number(req.query.packs || 1);
+
+    if (!id) return res.status(400).json({ ok: false, error: "Missing id" });
+    if (packs <= 0) packs = 1;
+
+    const PACK_COST = 5000;
+    const totalCost = PACK_COST * packs;
+
+    const user = await getUser(id);
+    if (!user) return res.status(404).json({ ok: false, error: "User not found" });
+
+    let { bankPoints, giftPoints } = user;
+
+    // ---- STEP 1: GIFT POINTS HARCA ----
+    let remainingCost = totalCost;
+
+    if (giftPoints > 0) {
+      const useGift = Math.min(giftPoints, remainingCost);
+      giftPoints -= useGift;
+      remainingCost -= useGift;
+    }
+
+    // ---- STEP 2: BANK POINTS HARCA (gerekirse) ----
+    if (remainingCost > 0) {
+      if (bankPoints < remainingCost) {
+        return res.status(400).json({
+          ok: false,
+          error: "Not enough points"
+        });
       }
+      bankPoints -= remainingCost;
     }
 
-    const userId = String(body?.userId || req.body?.userId || '')
-    const cost = Number(body?.cost || req.body?.cost || 0)
-    const packType = String(body?.packType || req.body?.packType || 'mystery')
-    
-    if (!userId || !Number.isFinite(cost) || cost <= 0) {
-      return res.status(400).json({ ok: false, error: 'userId and valid cost required' })
-    }
+    // ---- STEP 3: Kullanıcının puanlarını güncelle ----
+    user.giftPoints = giftPoints;
+    user.bankPoints = bankPoints;
 
-    const users = await loadUsers()
-    const u = getOrCreateUser(users, userId)
-    
-    // Check if user has enough total points (giftPoints + bankPoints)
-    const totalAvailable = (u.giftPoints || 0) + u.bankPoints
-    if (totalAvailable < cost) {
-      return res.status(400).json({ ok: false, error: 'Insufficient points' })
-    }
+    // totalPoints = bankPoints (UI için)
+    user.totalPoints = bankPoints;
 
-    // debitBank will automatically spend gift points first, then normal points
-    debitBank(u, cost, `purchase-${packType}-pack`, new Date().toISOString().slice(0, 10))
-    await saveUsers(users)
-    
-    return res.status(200).json({ ok: true, bankPoints: u.bankPoints, giftPoints: u.giftPoints || 0 })
-  } catch (e: any) {
-    console.error('Purchase pack error:', e)
-    return res.status(500).json({ ok: false, error: e?.message || 'Purchase failed' })
+    // Yeni kart eklemeyi burada yapabilirsiniz (zaten vardı)
+
+    await saveUser(user);
+
+    return res.json({
+      ok: true,
+      message: "Pack purchased successfully",
+      cost: totalCost,
+      giftPoints,
+      bankPoints,
+      totalPoints: user.totalPoints,
+    });
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ ok: false, error: "Server error" });
   }
 }
-
