@@ -2,6 +2,9 @@ import fs from 'fs'
 import path from 'path'
 import { loadUsersKV, saveUsersKV } from './kv'
 
+// Vercel production ortamını tespit et
+const IS_VERCEL = !!process.env.VERCEL
+
 export type LogEntry = {
   date: string // ISO date (YYYY-MM-DD)
   type: 'daily' | 'duel' | 'system'
@@ -44,12 +47,15 @@ const DATA_DIR = path.join(process.cwd(), 'data')
 const USERS_FILE = path.join(DATA_DIR, 'users.json')
 
 function ensureDir() {
+  // Vercel'de dosya yazmayacağız, o yüzden klasör yaratmaya gerek yok
+  if (IS_VERCEL) return
+
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true })
   }
 }
 
-// Try KV first, fallback to JSON file for backward compatibility
+// Try KV first, fallback to JSON file for backward compatibility (local dev)
 export async function loadUsers(): Promise<Record<string, UserRecord>> {
   try {
     // Try KV (Vercel production)
@@ -61,7 +67,8 @@ export async function loadUsers(): Promise<Record<string, UserRecord>> {
     console.warn('KV load failed, trying JSON fallback:', err)
   }
 
-  // Fallback to JSON file (local dev or migration period)
+  // Production'da KV boşsa, JSON fallback kullanmak istemiyorsak buradan direkt {} dönebiliriz.
+  // Ama JSON'dan okumak Vercel'de serbest (sadece yazmak yasak), o yüzden bırakıyorum.
   try {
     ensureDir()
     if (!fs.existsSync(USERS_FILE)) return {}
@@ -86,6 +93,11 @@ export async function saveUsers(map: Record<string, UserRecord>): Promise<void> 
     await saveUsersKV(map)
   } catch (err) {
     console.warn('KV save failed, trying JSON fallback:', err)
+  }
+
+  // Vercel production'da JSON'a yazmak yasak → EROFS hatası veriyor
+  if (IS_VERCEL) {
+    return
   }
 
   // Also save to JSON file for backup/local dev
@@ -146,6 +158,16 @@ export function getOrCreateUser(map: Record<string, UserRecord>, userId: string)
 
 // Sync version for backward compatibility (loads from JSON file)
 export function loadUsersSync(): Record<string, UserRecord> {
+  // Vercel'de sync KV olmadığı için, burada JSON okumaya çalışmak
+  // teorik olarak mümkün, ama dosya değişmeyecek.
+  // En güvenlisi: eğer KV'den normalize edip geçtiysek, burası
+  // sadece local development için kullanılsın.
+  if (IS_VERCEL) {
+    // Production'da bu sync fonksiyon çağrılırsa boş map ile başlayacağız,
+    // sonrasında saveUsersSync KV'ye yazacak.
+    return {}
+  }
+
   try {
     ensureDir()
     if (!fs.existsSync(USERS_FILE)) return {}
@@ -158,6 +180,14 @@ export function loadUsersSync(): Record<string, UserRecord> {
 }
 
 export function saveUsersSync(map: Record<string, UserRecord>): void {
+  // Vercel production'da kesinlikle dosya yazma → direkt KV
+  if (IS_VERCEL) {
+    // Async KV save (fire and forget)
+    saveUsersKV(map).catch(() => {})
+    return
+  }
+
+  // Local dev: JSON + KV
   ensureDir()
   fs.writeFileSync(USERS_FILE, JSON.stringify(map, null, 2), 'utf8')
   // Async KV save (fire and forget)
