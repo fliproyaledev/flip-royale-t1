@@ -527,6 +527,23 @@ export default function Arena(){
             <div className="row" style={{justifyContent:'space-between', alignItems:'center'}}>
               <h2>Arena Royale</h2>
               <div style={{display:'flex', gap:12, alignItems:'center'}}>
+                {user && (
+                  <button 
+                    className="btn" 
+                    onClick={createRoom} 
+                    disabled={creating || points < 2500}
+                    style={{
+                      background: creating || points < 2500 ? 'rgba(100,100,100,0.2)' : 'rgba(59,130,246,0.3)',
+                      borderColor: creating || points < 2500 ? 'rgba(100,100,100,0.3)' : 'rgba(59,130,246,0.4)',
+                      color: creating || points < 2500 ? 'rgba(255,255,255,0.5)' : '#bfdbfe',
+                      fontWeight: 700,
+                      fontSize: 15,
+                      padding: '10px 20px'
+                    }}
+                  >
+                    {creating ? 'Creating...' : `Create Room (${2500} pts)`}
+                  </button>
+                )}
                 {points < 2500 && (
                   <button className="btn" onClick={grantTest}>Get 100k Test Points</button>
                 )}
@@ -538,7 +555,46 @@ export default function Arena(){
               <div style={{padding:24,color:'var(--muted-inv)'}}>Loading rooms...</div>
             ) : (
               <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(260px, 1fr))', gap:16}}>
-                {rooms.length===0 && <div style={{padding:24,color:'var(--muted-inv)'}}>No rooms yet. Please check back soon.</div>}
+                {rooms.length===0 && (
+                  <div style={{
+                    padding:32,
+                    textAlign:'center',
+                    color:'var(--muted-inv)',
+                    background:'rgba(255,255,255,0.03)',
+                    borderRadius:16,
+                    border:'1px solid rgba(255,255,255,0.1)',
+                    gridColumn:'1/-1'
+                  }}>
+                    <div style={{fontSize:18, marginBottom:16, color:'#fff'}}>No rooms available yet</div>
+                    {user ? (
+                      <div>
+                        <div style={{marginBottom:16, color:'var(--muted-inv)'}}>Be the first to create a room and start a duel!</div>
+                        <button 
+                          className="btn" 
+                          onClick={createRoom} 
+                          disabled={creating || points < 2500}
+                          style={{
+                            background: creating || points < 2500 ? 'rgba(100,100,100,0.2)' : 'rgba(59,130,246,0.3)',
+                            borderColor: creating || points < 2500 ? 'rgba(100,100,100,0.3)' : 'rgba(59,130,246,0.4)',
+                            color: creating || points < 2500 ? 'rgba(255,255,255,0.5)' : '#bfdbfe',
+                            fontWeight: 700,
+                            fontSize: 16,
+                            padding: '12px 24px'
+                          }}
+                        >
+                          {creating ? 'Creating...' : `Create Room (${2500} pts)`}
+                        </button>
+                        {points < 2500 && (
+                          <div style={{marginTop:12, fontSize:12, color:'var(--muted-inv)'}}>
+                            Need more points? <button className="btn" onClick={grantTest} style={{fontSize:12, padding:'4px 8px', marginLeft:8}}>Get 100k Test Points</button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{color:'var(--muted-inv)'}}>Please register/login on PLAY page first to create a room.</div>
+                    )}
+                  </div>
+                )}
                 {rooms.map((r, idx)=>{
                   const SYSTEM_USER_ID = 'system'
                   const hasRealHost = r.host?.userId && r.host.userId !== SYSTEM_USER_ID
