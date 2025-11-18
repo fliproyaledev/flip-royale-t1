@@ -1,51 +1,52 @@
-import type { NextApiRequest, NextApiResponse } from "next";
-import { 
-  loadUsers, 
-  saveUsers, 
-  getOrCreateUser, 
-  debitBank 
-} from "../../../lib/users";
+import type { NextApiRequest, NextApiResponse } from "next"
+import { loadUsers, saveUsers, getOrCreateUser, debitBank } from "../../../lib/users"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    const userId = String(req.query.user || "").trim();
-    const packCount = Number(req.query.count || 1);
-
-    if (!userId) {
-      return res.status(400).json({ ok: false, error: "Missing user" });
-    }
-    if (!Number.isFinite(packCount) || packCount < 1) {
-      return res.status(400).json({ ok: false, error: "Invalid count" });
+    // İstek metodu kontrolü
+    if (req.method !== "POST" && req.method !== "GET") {
+      return res.status(405).json({ ok: false, error: "Method not allowed" })
     }
 
-    // Load map
-    const users = await loadUsers();
+    // FRONTEND user parametresi GÖNDERMİYOR → biz otomatik üretiriz
+    const userId =
+      req.query.user?.toString() ||
+      req.body?.user?.toString() ||
+      req.headers["x-user-id"]?.toString() ||
+      "guest-" + Math.random().toString(36).slice(2, 9)
 
-    // Load or create user
-    const user = getOrCreateUser(users, userId);
+    const count = Number(req.query.count || req.body?.count || 1)
 
-    // PACK COST = 5000 per pack
-    const cost = packCount * 5000;
+    if (!Number.isFinite(count) || count <= 0) {
+      return res.status(400).json({ ok: false, error: "Invalid count" })
+    }
 
-    // Payment uses debitBank → spends giftPoints first (correct)
-    debitBank(user, cost, `purchase-pack-${packCount}`);
+    // Kullanıcıları yükle
+    const map = await loadUsers()
 
-    user.updatedAt = new Date().toISOString();
+    // User oluştur veya getir
+    const user = getOrCreateUser(map, userId)
 
-    await saveUsers(users);
+    // 1 pack = 5000 points
+    const packCost = 5000 * count
+
+    if (user.bankPoints + user.giftPoints < packCost) {
+      return res.status(400).json({ ok: false, error: "Insufficient points" })
+    }
+
+    // Puan düş
+    debitBank(user, packCost, "purchase-pack")
+
+    // Kullanıcıyı kaydet
+    await saveUsers(map)
 
     return res.json({
       ok: true,
-      user: {
-        id: user.id,
-        bankPoints: user.bankPoints,
-        giftPoints: user.giftPoints,
-        totalPoints: user.totalPoints,
-      }
-    });
-
+      user,
+      purchased: count,
+      cost: packCost
+    })
   } catch (err: any) {
-    console.error("purchasePack error:", err);
-    return res.status(500).json({ ok: false, error: err.message });
+    return res.status(500).json({ ok: false, error: err.message || "Server error" })
   }
 }
