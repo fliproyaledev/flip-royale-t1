@@ -1,12 +1,18 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { loadUsers, saveUsers, creditGamePoints, type RoundPick } from '../../../lib/users'
+import { 
+  loadUsers, 
+  saveUsers, 
+  creditGamePoints, 
+  type RoundPick 
+} from '../../../lib/users'
 
+// --- Utility: Duplicate Pick Nerf ---
 function nerfFactor(dup: number): number {
   if (dup <= 1) return 1
   if (dup === 2) return 0.75
   if (dup === 3) return 0.5
   if (dup === 4) return 0.25
-  if (dup === 5) return 0
+  if (dup >= 5) return 0
   return 0
 }
 
@@ -14,6 +20,7 @@ function clamp(val: number, min: number, max: number): number {
   return Math.min(Math.max(val, min), max)
 }
 
+// --- POINT CALCULATION ---
 function calcPoints(
   p0: number,
   pNow: number,
@@ -43,67 +50,77 @@ function calcPoints(
   return Math.round(pts)
 }
 
+// --- PRICE FETCH FROM INTERNAL API ---
 async function getPrice(tokenId: string): Promise<any> {
   try {
-    const baseUrl = process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    const baseUrl =
+      process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
 
-    const r = await fetch(`${baseUrl}/api/price?token=${encodeURIComponent(tokenId)}`, {
-      headers: { 'User-Agent': 'FlipRoyale-Cron/1.0' }
-    })
+    const r = await fetch(
+      `${baseUrl}/api/price?token=${encodeURIComponent(tokenId)}`,
+      { headers: { 'User-Agent': 'FlipRoyale-Cron/1.0' } }
+    )
 
-    if (!r.ok) throw new Error(`Price API returned ${r.status}`)
+    if (!r.ok) throw new Error(`Price API failed ${r.status}`)
+    const d = await r.json()
 
-    const data = await r.json()
     return {
-      p0: data.p0 || data.pLive || 1,
-      pLive: data.pLive || 1,
-      pClose: data.pClose || data.pLive || 1,
-      changePct: data.changePct
+      p0: d.p0 || d.pLive || 1,
+      pLive: d.pLive || 1,
+      pClose: d.pClose || d.pLive || 1,
+      changePct: d.changePct || 0
     }
   } catch (e) {
-    console.error(`Failed to fetch price for ${tokenId}:`, e)
+    console.error(`❌ Price fetch error for ${tokenId}:`, e)
     return { p0: 1, pLive: 1, pClose: 1, changePct: 0 }
   }
 }
 
-function utcDayKey(d: Date = new Date()): string {
+// --- UTC DATE KEY ---
+function utcDayKey() {
+  const d = new Date()
   const y = d.getUTCFullYear()
-  const m = d.getUTCMonth()
-  const day = d.getUTCDate()
-  return `${y}-${String(m + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(d.getUTCDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
 
+// --- HANDLER ---
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
 
   if (req.method !== 'GET' && req.method !== 'POST') {
-    return res.status(405).json({ ok: false, error: 'Method not allowed' })
+    return res.status(405).json({ ok: false, error: 'Method Not Allowed' })
   }
 
-  // Allow test mode: ?test=1
   const isTestMode = req.query.test === '1'
 
-  // Block non-cron requests in production (except test mode)
+  // Allow only Vercel Cron in production
   if (process.env.NODE_ENV === 'production' && !isTestMode) {
-    const isCron = !!req.headers['x-vercel-cron']
-    if (!isCron) {
-      return res.status(401).json({ ok: false, error: 'Unauthorized (Not from Vercel Cron)' })
+    if (!req.headers['x-vercel-cron']) {
+      return res.status(401).json({ ok: false, error: 'Unauthorized (Not Vercel Cron)' })
     }
   }
 
   try {
     const today = utcDayKey()
-    console.log(`🔄 [CRON-SETTLE] Starting round settlement for ${today}`)
+    console.log(`🔄 [CRON-Rounds] Settling rounds for ${today}`)
 
     const users = await loadUsers()
     const settledUsers: string[] = []
-    const errors: Array<{ userId: string; error: string }> = []
+    const errors: any[] = []
 
-    for (const userId in users) {
-      const user = users[userId]
+    for (const id in users) {
+      const user = users[id]
 
-      if (!user.activeRound || user.activeRound.length === 0) continue
+      if (!user || typeof user !== 'object') continue
+      if (!user.id || user.id.trim() === '') continue
+
+      if (!Array.isArray(user.activeRound)) user.activeRound = []
+      if (!Array.isArray(user.nextRound)) user.nextRound = Array(5).fill(null)
+
+      // Already settled today
       if (user.lastSettledDay === today) continue
 
       try {
@@ -112,38 +129,42 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         for (const pick of user.activeRound) {
           if (!pick || !pick.tokenId) continue
 
-          if (pick.locked && pick.pointsLocked !== undefined) {
+          // If pick was manually locked
+          if (pick.locked && typeof pick.pointsLocked === 'number') {
             totalPoints += pick.pointsLocked
             continue
           }
 
-          try {
-            const priceData = await getPrice(pick.tokenId)
-            const pClose = priceData.pClose || priceData.pLive
-            const p0 = priceData.p0 || priceData.pLive
+          const price = await getPrice(pick.tokenId)
 
-            const points = calcPoints(
-              p0,
-              pClose,
-              pick.dir,
-              pick.duplicateIndex,
-              0,
-              false
-            )
-            totalPoints += points
-          } catch (e) {
-            console.error(`Point calc failed for ${pick.tokenId}:`, e)
-          }
+          const points = calcPoints(
+            price.p0,
+            price.pClose,
+            pick.dir,
+            pick.duplicateIndex,
+            0,
+            false
+          )
+
+          totalPoints += points
         }
 
+        // Apply points to leaderboard + bank
         if (totalPoints !== 0) {
-          creditGamePoints(user, totalPoints, `flip-royale-round-${today}`, today)
+          creditGamePoints(
+            user,
+            totalPoints,
+            `flip-royale-round-${today}`,
+            today
+          )
         }
 
-        const validNextRound = (user.nextRound || []).filter(p => p !== null) as RoundPick[]
-        if (validNextRound.length > 0) {
-          user.activeRound = validNextRound
-          user.nextRound = Array(5).fill(null) as any
+        // Move nextRound → activeRound
+        const next = (user.nextRound || []).filter(Boolean) as RoundPick[]
+
+        if (next.length > 0) {
+          user.activeRound = next
+          user.nextRound = Array(5).fill(null)
         } else {
           user.activeRound = []
         }
@@ -152,10 +173,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         user.lastSettledDay = today
         user.updatedAt = new Date().toISOString()
 
-        settledUsers.push(userId)
+        settledUsers.push(user.id)
 
       } catch (e: any) {
-        errors.push({ userId, error: e?.message || 'Unknown error' })
+        errors.push({ userId: id, error: e?.message || 'Unknown error' })
       }
     }
 
@@ -164,12 +185,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({
       ok: true,
       date: today,
-      settledCount: settledUsers.length,
       settledUsers,
+      settledCount: settledUsers.length,
       errors
     })
 
-  } catch (e: any) {
-    return res.status(500).json({ ok: false, error: e?.message || 'Internal server error' })
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: err?.message || 'Internal error' })
   }
 }
