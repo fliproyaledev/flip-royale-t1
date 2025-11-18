@@ -9,15 +9,12 @@
   },
   "crons": [
     {
-      "path": "pages/api/cron/settle-rounds",
+      "path": "/api/cron/settle-rounds",
       "schedule": "0 0 * * *"
     },
     {
-      "path": "pages/api/cron/settle-arenas",
+      "path": "/api/cron/settle-arenas",
       "schedule": "0 0 * * *"
     }
   ]
 }
-
-
-
