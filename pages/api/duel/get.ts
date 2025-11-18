@@ -1,8 +1,12 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { loadDuels } from '../../../lib/duels'
+import { loadDuels, seedDailyRooms } from '../../../lib/duels'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const id = String(req.query.id || '')
+  // Clean up any legacy auto-seeded rooms before responding
+  try {
+    await seedDailyRooms()
+  } catch {}
   const map = await loadDuels()
   const today = new Date().toISOString().slice(0, 10)
   
