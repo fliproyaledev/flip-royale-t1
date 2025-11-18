@@ -1,39 +1,47 @@
-import type { NextApiRequest, NextApiResponse } from 'next'
-import { loadUsers, saveUsers, getOrCreateUser, type RoundPick } from '../../../lib/users'
+import { NextApiRequest, NextApiResponse } from 'next'
+import { loadUsers, saveUsers, getOrCreateUser } from '../../../lib/users'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ ok: false, error: 'Method not allowed' })
-  }
+  const { user: userId, token, dir } = req.query
 
-  const userId = String(req.query.user || '')
-  const tokenId = String(req.query.token || '')
-  const dir = String(req.query.dir || 'UP').toUpperCase() as 'UP' | 'DOWN'
-
-  if (!userId || !tokenId) {
-    return res.status(400).json({ ok: false, error: 'Missing user or token' })
+  if (!userId || !token || !dir) {
+    return res.status(400).json({ ok: false, error: 'Missing params' })
   }
 
   const users = await loadUsers()
-  const user = getOrCreateUser(users, userId)
+  const user = getOrCreateUser(users, String(userId))
 
-  const newPick: RoundPick = {
-    tokenId,
-    dir,
-    duplicateIndex: 1,
-    locked: false
+  // Ensure nextRound exists and has 5 slots
+  if (!Array.isArray(user.nextRound)) {
+    user.nextRound = Array(5).fill(null)
   }
 
-  user.activeRound = user.activeRound || []
-  user.activeRound.push(newPick)
+  // Find empty slot (null)
+  const slot = user.nextRound.findIndex((x) => x === null)
+  if (slot === -1) {
+    return res.status(400).json({ ok: false, error: 'nextRound full' })
+  }
+
+  // Count existing duplicates of this token
+  const existing = user.nextRound.filter(
+    (x) => x && x.tokenId === token
+  )
+  const duplicateIndex = existing.length + 1
+
+  user.nextRound[slot] = {
+    tokenId: String(token),
+    dir: String(dir).toUpperCase(),
+    duplicateIndex,
+    locked: false,
+  }
 
   user.updatedAt = new Date().toISOString()
-
   await saveUsers(users)
 
-  return res.status(200).json({
+  return res.json({
     ok: true,
-    addedPick: newPick,
-    user: userId
+    addedPick: user.nextRound[slot],
+    slot,
+    user: userId,
   })
 }
