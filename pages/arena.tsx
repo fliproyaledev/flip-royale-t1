@@ -231,24 +231,19 @@ export default function Arena(){
   function formatTime(ts:string){ try{ return new Date(ts).toUTCString() } catch { return ts } }
   function minutesToEval(r: DuelRoom){ try { const ms = new Date(r.evalAt).getTime() - Date.now(); return Math.max(0, Math.floor(ms/60000)) } catch { return 0 } }
   function occupancy(r: DuelRoom){ 
-    const SYSTEM_USER_ID = 'system'
-    const hasRealHost = r.host?.userId && r.host.userId !== SYSTEM_USER_ID
+    const hasHost = !!(r.host && r.host.userId)
     const hasGuest = !!r.guest
-    const count = (hasRealHost ? 1 : 0) + (hasGuest ? 1 : 0)
+    const count = (hasHost ? 1 : 0) + (hasGuest ? 1 : 0)
     return count + '/2'
   }
 
   function isParticipant(r: DuelRoom | null){ 
     if(!r||!user) return false
-    const SYSTEM_USER_ID = 'system'
-    const hasRealHost = r.host?.userId && r.host.userId !== SYSTEM_USER_ID
-    return (hasRealHost && r.host.userId===user.id) || r.guest?.userId===user.id 
+    return r.host?.userId === user.id || r.guest?.userId === user.id 
   }
   function mySide(r: DuelRoom | null){ 
     if(!r||!user) return undefined as any
-    const SYSTEM_USER_ID = 'system'
-    const hasRealHost = r.host?.userId && r.host.userId !== SYSTEM_USER_ID
-    if (hasRealHost && r.host.userId===user.id) return r.host
+    if (r.host?.userId===user.id) return r.host
     if (r.guest?.userId===user.id) return r.guest
     return undefined
   }
@@ -596,11 +591,10 @@ export default function Arena(){
                   </div>
                 )}
                 {rooms.map((r, idx)=>{
-                  const SYSTEM_USER_ID = 'system'
-                  const hasRealHost = r.host?.userId && r.host.userId !== SYSTEM_USER_ID
-                  const youHost = user && r.host?.userId===user.id && hasRealHost
+                  const hasHost = !!(r.host && r.host.userId)
+                  const youHost = !!(user && hasHost && r.host.userId === user.id)
                   const canCancel = youHost && r.status==='open' && !r.guest
-                  const canJoin = user && r.status==='open' && !r.guest && (!hasRealHost || !youHost)
+                  const canJoin = !!(user && r.status==='open' && !r.guest && !youHost)
                   const mins = minutesToEval(r)
                   const occ = occupancy(r)
                   return (
@@ -626,7 +620,9 @@ export default function Arena(){
                       </div>
                       <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:4}}>
                         <div style={{fontSize:11, color:'var(--muted-inv)'}}>
-                          {hasRealHost ? `Host ${r.host.userId.slice(0,6)}…${r.host.userId.slice(-4)}` : 'Empty'}
+                          {hasHost && r.host?.userId
+                            ? `Host ${r.host.userId.slice(0,6)}…${r.host.userId.slice(-4)}`
+                            : 'Empty'}
                         </div>
                         <div style={{display:'flex', gap:8}}>
                           <button className="btn" onClick={()=>router.push(`/arena?room=${encodeURIComponent(r.id)}`)}>{canJoin?'Details':'Open'}</button>
@@ -669,8 +665,10 @@ export default function Arena(){
                   </div>
                   <div>
                     <div className="muted" style={{fontSize:12}}>Host</div>
-                    <div style={{color:'#fff'}}>
-                      {room.host.userId === 'system' ? 'Empty' : `${room.host.userId.slice(0,6)}…${room.host.userId.slice(-4)} ${room.host.locked ? '(locked)':''}`}
+                    <div style={{color: room.host?.userId ? '#fff' : '#94a3b8'}}>
+                      {room.host?.userId
+                        ? `${room.host.userId.slice(0,6)}…${room.host.userId.slice(-4)} ${room.host.locked ? '(locked)':''}`
+                        : '—'}
                     </div>
                   </div>
                   <div>
