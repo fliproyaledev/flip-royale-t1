@@ -1,51 +1,63 @@
 // pages/api/round/load.ts
-
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { loadUsers, getOrCreateUser } from '../../../lib/users'
 import type { RoundPick } from '../../../lib/users'
 
-const MAX_SLOTS = 5
+type LoadResponse = {
+  ok: boolean
+  activeRound: RoundPick[]
+  nextRound: (RoundPick | null)[]
+  currentRound: number
+  lastSettledDay: string | null
+}
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse<LoadResponse | { ok: false; error: string }>
+) {
   if (req.method !== 'GET') {
     return res.status(405).json({ ok: false, error: 'Method not allowed' })
   }
 
-  // USER ID'Yİ HER YERDEN OKU (header + query + body)
-  const userId =
-    req.headers['x-user-id']?.toString() ||
-    req.query.userId?.toString() ||
-    req.query.user?.toString() ||
-    req.body?.userId?.toString() ||
-    req.body?.user?.toString() ||
-    ''
+  try {
+    const userId = String(req.query.userId || req.query.user || '').trim()
+    if (!userId) {
+      return res.status(400).json({ ok: false, error: 'userId required' })
+    }
 
-  if (!userId) {
-    return res.status(400).json({ ok: false, error: 'userId required' })
+    // Tüm kullanıcıları Redis’ten çek
+    const users = await loadUsers()
+
+    // Kullanıcıyı oluştur / düzelt
+    const user = getOrCreateUser(users, userId)
+
+    // Güvenlik: alanları normalize et
+    if (!Array.isArray(user.activeRound)) {
+      user.activeRound = []
+    }
+    if (!Array.isArray(user.nextRound)) {
+      user.nextRound = Array(5).fill(null) as any
+    }
+    if (!user.currentRound || typeof user.currentRound !== 'number') {
+      user.currentRound = 1
+    }
+
+    const lastSettled =
+      typeof user.lastSettledDay === 'string' && user.lastSettledDay.length > 0
+        ? user.lastSettledDay
+        : null
+
+    return res.status(200).json({
+      ok: true,
+      activeRound: user.activeRound,
+      nextRound: user.nextRound,
+      currentRound: user.currentRound,
+      lastSettledDay: lastSettled,
+    })
+  } catch (e: any) {
+    console.error('[ROUND/LOAD] error:', e)
+    return res
+      .status(500)
+      .json({ ok: false, error: e?.message || 'Failed to load round data' })
   }
-
-  const users = await loadUsers()
-  const user = getOrCreateUser(users, userId)
-
-  // ACTIVE ROUND
-  const activeRound = Array.isArray(user.activeRound) ? user.activeRound : []
-
-  // NEXT ROUND: VERİYİ BOZMADAN SADECE 5 SLota normalize et
-  const rawNext = Array.isArray(user.nextRound)
-    ? (user.nextRound as (RoundPick | null)[])
-    : []
-
-  const nextRound: (RoundPick | null)[] = new Array(MAX_SLOTS).fill(null)
-  for (let i = 0; i < Math.min(MAX_SLOTS, rawNext.length); i++) {
-    nextRound[i] = rawNext[i] ?? null
-  }
-
-  // DİKKAT: Burada user'ı SAVE ETMİYORUZ, hiçbir şeyi silmiyoruz.
-  return res.status(200).json({
-    ok: true,
-    activeRound,
-    nextRound,
-    currentRound: user.currentRound ?? 1,
-    lastSettledDay: user.lastSettledDay ?? null,
-  })
 }
