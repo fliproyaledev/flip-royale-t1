@@ -76,7 +76,7 @@ export default function Guide(){
         
         <h3>Getting Started</h3>
         <ul>
-          <li><b>Create Your Profile</b>: Go to the PLAY page, register with a username and wallet address. New players start with <b>50,000 points</b> and <b>1 Common Pack</b>.</li>
+          <li><b>Create Your Profile</b>: Go to the PLAY page, register with a username and wallet address. New players start with <b>10,000 gift points</b> (for packs & Arena Royale rooms only).</li>
           <li><b>Understanding Cards</b>: Each card represents a cryptocurrency token on Base network. Cards are tied to specific token trading pairs on Dexscreener.</li>
           <li><b>Opening Packs</b>: Use your packs to get new cards. You can view all your cards in the INVENTORY page.</li>
         </ul>
