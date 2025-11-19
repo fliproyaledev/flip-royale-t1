@@ -16,18 +16,29 @@ export default function Inventory(){
   const [user, setUser] = useState<any>(null)
 
   useEffect(()=>{
-    // Check if user is logged in (optional)
-    const savedUser = localStorage.getItem('flipflop-user')
-    if (savedUser) {
-      setUser(JSON.parse(savedUser))
+    async function load() {
+        const savedUser = localStorage.getItem('flipflop-user')
+        let userId = ''
+        if (savedUser) {
+            try {
+                const u = JSON.parse(savedUser)
+                setUser(u)
+                userId = u.id
+            } catch {}
+        }
+        
+        if (userId) {
+            try {
+                const r = await fetch(`/api/users/me?userId=${encodeURIComponent(userId)}`)
+                const j = await r.json()
+                if (j.ok && j.user) {
+                    setUser(j.user)
+                    if (j.user.inventory) setInventory(j.user.inventory)
+                }
+            } catch(e) { console.error(e) }
+        }
     }
-    
-    // Load from localStorage
-    const savedInventory = localStorage.getItem('flipflop-inventory')
-    
-    if (savedInventory) {
-      setInventory(JSON.parse(savedInventory))
-    }
+    load()
   },[])
 
   return (
