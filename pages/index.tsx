@@ -1526,13 +1526,6 @@ useEffect(() => {
                     Gift: {giftPoints.toLocaleString()} pts
                   </div>
                 )}
-                <div style={{
-                  fontSize: 11,
-                  color: theme === 'light' ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.5)',
-                  fontWeight: 500
-                }}>
-                  Spendable: {points.toLocaleString()} pts
-                </div>
               </div>
               
               <button
