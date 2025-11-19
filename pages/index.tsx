@@ -127,6 +127,7 @@ export default function Home(){
   const [stateLoaded, setStateLoaded] = useState(false)
   const [inventoryLoaded, setInventoryLoaded] = useState(false)
   const [points, setPoints] = useState<number>(0)
+  const [earnedPoints, setEarnedPoints] = useState<number>(0)
   const [giftPoints, setGiftPoints] = useState<number>(0)
   const [buyQty, setBuyQty] = useState<number>(1)
   const [showMysteryResults, setShowMysteryResults] = useState<{open:boolean; cards:string[]}>({open:false, cards:[]})
@@ -150,6 +151,7 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
     setModalOpen({ open: false, type: 'select' })
     setModalSearch('')
     setPoints(0)
+    setEarnedPoints(0)
     setCurrentRound(1)
     setBoost({ level: 0 })
     setBoostNext(0)
@@ -198,6 +200,9 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
             }
             if (j.user.giftPoints !== undefined) {
               setGiftPoints(j.user.giftPoints)
+            }
+            if (typeof j.user.totalPoints === 'number') {
+              setEarnedPoints(j.user.totalPoints)
             }
           }
         } catch {}
@@ -692,6 +697,9 @@ useEffect(() => {
           currentGiftPoints = checkJ.user.giftPoints
           setGiftPoints(currentGiftPoints)
         }
+        if (typeof checkJ.user.totalPoints === 'number') {
+          setEarnedPoints(checkJ.user.totalPoints)
+        }
         try {
           localStorage.setItem('flipflop-points', String(currentPoints))
         } catch {}
@@ -751,6 +759,9 @@ useEffect(() => {
         }
         if (typeof updatedUser.giftPoints === 'number') {
           setGiftPoints(updatedUser.giftPoints)
+        }
+        if (typeof updatedUser.totalPoints === 'number') {
+          setEarnedPoints(updatedUser.totalPoints)
         }
         if (updatedUser.inventory && typeof updatedUser.inventory === 'object') {
           setInventory(updatedUser.inventory)
@@ -956,9 +967,9 @@ useEffect(() => {
           // Load rounds
           if (Array.isArray(data.user.activeRound)) setActive(data.user.activeRound)
           if (Array.isArray(data.user.nextRound)) {
-             setNextRound(data.user.nextRound)
-             // If loaded from server, it is saved
-             setNextRoundSaved(true)
+            setNextRound(data.user.nextRound)
+            const hasSavedNext = data.user.nextRound.some((p: any) => p)
+            setNextRoundSaved(hasSavedNext)
           }
           
           // Points
@@ -967,6 +978,9 @@ useEffect(() => {
           }
           if (typeof data.user.giftPoints === 'number') {
               setGiftPoints(data.user.giftPoints)
+          }
+          if (typeof data.user.totalPoints === 'number') {
+              setEarnedPoints(data.user.totalPoints)
           }
 
           setInventoryLoaded(true)
@@ -1282,6 +1296,7 @@ useEffect(() => {
 
       // Optimistic update
       setPoints(p => p + totalPoints)
+      setEarnedPoints(e => e + totalPoints)
       setHistory(prev => [entry as any, ...prev].slice(0, 30))
 
       // Call API
@@ -1292,6 +1307,9 @@ useEffect(() => {
       }).then(r => r.json()).then(j => {
           if (j.ok && j.user) {
              setPoints(j.user.bankPoints)
+             if (typeof j.user.totalPoints === 'number') {
+               setEarnedPoints(j.user.totalPoints)
+             }
              // Update history from server if available
              // if (j.user.roundHistory) setHistory(j.user.roundHistory)
           }
@@ -1497,7 +1515,7 @@ useEffect(() => {
                   textShadow: theme === 'light' ? 'none' : '0 1px 2px rgba(0,0,0,0.3)',
                   whiteSpace: 'nowrap'
                 }}>
-                  {(points - giftPoints).toLocaleString()} pts
+                  {earnedPoints.toLocaleString()} pts
                 </div>
                 {giftPoints > 0 && (
                   <div style={{
@@ -1508,6 +1526,13 @@ useEffect(() => {
                     Gift: {giftPoints.toLocaleString()} pts
                   </div>
                 )}
+                <div style={{
+                  fontSize: 11,
+                  color: theme === 'light' ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.5)',
+                  fontWeight: 500
+                }}>
+                  Spendable: {points.toLocaleString()} pts
+                </div>
               </div>
               
               <button
