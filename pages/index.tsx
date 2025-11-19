@@ -973,18 +973,6 @@ useEffect(() => {
           setStateLoaded(true)
           setNextRoundLoaded(true)
           
-          // Daily Pack Check
-          const today = new Date().toISOString().slice(0, 10)
-          if (data.user.lastDailyPack !== today) {
-               const newPack = {
-                dayKey: utcDayKey(),
-                cards: [], 
-                opened: false
-              }
-              setCurrentPack(newPack)
-          } else {
-              setCurrentPack(null)
-          }
       }
     } catch(e) {
         console.error("Load failed", e)
