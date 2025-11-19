@@ -62,32 +62,32 @@ export default function History() {
   }
 
   useEffect(() => {
-    const savedUser = localStorage.getItem('flipflop-user')
-    if (savedUser) {
-      const parsed = JSON.parse(savedUser)
-      if (!parsed.avatar) {
-        parsed.avatar = DEFAULT_AVATAR
-        try { localStorage.setItem('flipflop-user', JSON.stringify(parsed)) } catch {}
-      }
-      setUser(parsed)
-      
-      // Load arena history
-      if (parsed.id) {
-        loadArenaHistory(parsed.id)
-      }
-    }
-
-    const savedHistory = localStorage.getItem('flipflop-history')
-    if (savedHistory) {
-      try {
-        const parsed = JSON.parse(savedHistory)
-        if (Array.isArray(parsed)) {
-          setHistory(parsed)
+    async function load() {
+        const savedUser = localStorage.getItem('flipflop-user')
+        let userId = ''
+        if (savedUser) {
+            try { userId = JSON.parse(savedUser).id } catch {}
         }
-      } catch {
-        setHistory([])
-      }
+        
+        if (userId) {
+            try {
+                const r = await fetch(`/api/users/me?userId=${encodeURIComponent(userId)}`)
+                const j = await r.json()
+                if (j.ok && j.user) {
+                    setUser(j.user)
+                    if (Array.isArray(j.user.roundHistory)) {
+                         const mapped = j.user.roundHistory.map((h: any) => ({
+                            ...h,
+                            total: h.totalPoints ?? h.total ?? 0
+                        }))
+                        setHistory(mapped)
+                    }
+                    loadArenaHistory(userId)
+                }
+            } catch(e) { console.error(e) }
+        }
     }
+    load()
     setLoading(false)
   }, [])
 
