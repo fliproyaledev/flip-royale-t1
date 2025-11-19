@@ -7,37 +7,47 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(405).json({ ok: false, error: "Method not allowed" })
     }
 
-    // --- USERID KONTROLÜ (TEK DOĞRU YÖNTEM) ---
+    // ---------------------------
+    //  USER ID SADECE BURADAN GELİR
+    // ---------------------------
     let userId = req.headers["x-user-id"]?.toString() || ""
 
+    // Yeni kullanıcı → guest ID üret
     if (!userId || userId === "null" || userId === "undefined") {
-      // İlk defa pack alan guest kullanıcı
-      userId = "guest-" + Math.random().toString(36).slice(2, 9)
+      userId = "guest-" + Math.random().toString(36).slice(2, 10)
     }
 
+    // Kaç paket alınıyor?
     const count = Number(req.body?.count || 1)
     if (!Number.isFinite(count) || count <= 0) {
       return res.status(400).json({ ok: false, error: "Invalid count" })
     }
 
+    // Paket fiyatı
     const packCost = 5000 * count
 
-    // --- USERS LOAD ---
+    // ---------------------------
+    //  USERS LOAD → KV üzerinden
+    // ---------------------------
     const map = await loadUsers()
     const user = getOrCreateUser(map, userId)
 
-    // --- POINT CHECK ---
+    // Para kontrolü
     if (user.bankPoints + user.giftPoints < packCost) {
       return res.status(400).json({ ok: false, error: "Insufficient points" })
     }
 
-    // --- BUY PACK (gift -> bank sıralaması zaten debitBank içinde) ---
+    // ---------------------------
+    //  PUAN DÜŞÜŞÜ (önce gift → sonra bank)
+    // ---------------------------
     debitBank(user, packCost, "purchase-pack")
 
-    // --- SAVE ---
+    // ---------------------------
+    //  KAYDET
+    // ---------------------------
     await saveUsers(map)
 
-    return res.json({
+    return res.status(200).json({
       ok: true,
       purchased: count,
       cost: packCost,
