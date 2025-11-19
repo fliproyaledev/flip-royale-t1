@@ -1,5 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { loadUsers, saveUsers, getOrCreateUser, debitBank } from "../../../lib/users"
+import { makeRandom5 } from "../../../lib/game-utils"
+import { TOKENS } from "../../../lib/tokens"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -42,6 +44,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // ---------------------------
     debitBank(user, packCost, "purchase-pack")
 
+    // Generate cards
+    const allNewCards: string[] = []
+    for(let i=0; i<count; i++) {
+      const cards = makeRandom5(TOKENS)
+      allNewCards.push(...cards)
+    }
+
+    // Update inventory
+    if (!user.inventory) user.inventory = {}
+    for (const cardId of allNewCards) {
+      user.inventory[cardId] = (user.inventory[cardId] || 0) + 1
+    }
+
     // ---------------------------
     //  KAYDET
     // ---------------------------
@@ -51,7 +66,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       ok: true,
       purchased: count,
       cost: packCost,
-      user
+      user,
+      newCards: allNewCards
     })
 
   } catch (err: any) {
