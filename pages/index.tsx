@@ -560,21 +560,51 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
 
   // CRITICAL: Auto-save nextRound to localStorage whenever it changes
   // This ensures data is never lost, even if user forgets to click "Save Picks"
-  useEffect(() => {
-    if (!stateLoaded || !nextRoundLoaded) return
-    
-    // Don't auto-save if it's empty (initial state)
-    const hasData = nextRound.some(p => p !== null)
-    if (!hasData) return
-    
+useEffect(() => {
+  // State tam yüklenmeden veya user yokken hiçbir şey yapma
+  if (!stateLoaded || !nextRoundLoaded || !user?.id) return
+
+  try {
+    // 1) LocalStorage’a yaz
+    const serialized = JSON.stringify(nextRound)
+    localStorage.setItem('flipflop-next', serialized)
+    console.log('💾 [AUTO] nextRound synced to localStorage:', serialized)
+  } catch (err) {
+    console.error('Failed to sync nextRound to localStorage:', err)
+  }
+
+  // 2) Sunucuya (Redis’e) yaz
+  ;(async () => {
     try {
-      const serialized = JSON.stringify(nextRound)
-      localStorage.setItem('flipflop-next', serialized)
-      console.log('💾 [AUTO-SAVE] Auto-saved nextRound to localStorage:', nextRound)
-    } catch (e) {
-      console.error('❌ [AUTO-SAVE] Failed to auto-save nextRound:', e)
+      const res = await fetch('/api/round/save', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: user.id,
+          activeRound: active,     // ekranda görünen aktif round state’in
+          nextRound,               // seçtiğin kartlar
+          currentRound,            // şu anki round numarası
+        }),
+      })
+
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok || !data.ok) {
+        console.error(
+          '⚠️ [AUTO] Failed to sync round to server:',
+          data?.error || res.statusText
+        )
+      } else {
+        console.log('✅ [AUTO] nextRound synced to server for', user.id)
+      }
+    } catch (err) {
+      console.error('⚠️ [AUTO] Network error while syncing round to server:', err)
     }
-  }, [nextRound, stateLoaded, nextRoundLoaded])
+  })()
+}, [nextRound, stateLoaded, nextRoundLoaded, user?.id, active, currentRound])
+
 
   // CRITICAL: Ensure nextRound is loaded from localStorage on every mount
   // This is a safety check to prevent data loss
