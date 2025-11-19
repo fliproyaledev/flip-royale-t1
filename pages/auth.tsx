@@ -90,111 +90,29 @@ export default function Auth(){
     }
 
     try {
-      if (isLogin) {
-        // Login logic - check server first
-        try {
-          const userId = walletAddress.trim() || username.trim()
-          const r = await fetch(`/api/users/me?userId=${encodeURIComponent(userId)}`)
-          const j = await r.json()
-          if (j?.ok && j?.user) {
-            const userData = j.user
-            const newUser: User = {
-              id: userData.id || userId,
-              username: userData.name || username,
-              walletAddress: walletAddress || undefined,
-              createdAt: userData.updatedAt || new Date().toISOString(),
-              lastLogin: new Date().toISOString(),
-              avatar: userData.avatar || DEFAULT_AVATAR
-            }
-            localStorage.setItem('flipflop-user', JSON.stringify(newUser))
-            setSuccess('Login successful!')
-            setTimeout(() => router.push('/'), 1000)
-            return
-          }
-        } catch (err) {
-          // Fallback to local storage check
-        }
+      // Login / Register logic - unified via API
+      // The API creates the user if it doesn't exist
+      const userId = walletAddress.trim() || username.trim()
+      if (!userId) throw new Error("Username required")
 
-        // Fallback: Check local storage
-        const existingUsers = JSON.parse(localStorage.getItem('flipflop-users') || '[]')
-        const user = existingUsers.find((u: User) => u.username === username)
-        if (!user) {
-          setError('User not found')
-          setLoading(false)
-          return
-        }
+      const r = await fetch(`/api/users/me?userId=${encodeURIComponent(userId)}&walletAddress=${encodeURIComponent(walletAddress)}`)
+      const j = await r.json()
+      
+      if (j?.ok && j?.user) {
+        const u = j.user
+        // Save session
+        localStorage.setItem('flipflop-user', JSON.stringify({ 
+            id: u.id, 
+            username: u.username || username, 
+            avatar: u.avatar 
+        }))
         
-        user.lastLogin = new Date().toISOString()
-        localStorage.setItem('flipflop-users', JSON.stringify(existingUsers))
-        localStorage.setItem('flipflop-user', JSON.stringify(user))
-        
-        setSuccess('Login successful!')
+        setSuccess(isLogin ? 'Login successful!' : 'Registration successful!')
         setTimeout(() => router.push('/'), 1000)
       } else {
-        // Register logic
-        const userId = walletAddress.trim() || `user_${Date.now()}`
-        
-        // Register on server to get initial points and pack
-        try {
-          // Register with wallet address if available
-          const registerUrl = walletAddress 
-            ? `/api/users/me?userId=${encodeURIComponent(userId)}&walletAddress=${encodeURIComponent(walletAddress)}`
-            : `/api/users/me?userId=${encodeURIComponent(userId)}`
-          
-          const r = await fetch(registerUrl)
-          const j = await r.json()
-          if (j?.ok && j?.user) {
-            const userData = j.user
-            const newUser: User = {
-              id: userData.id || userId,
-              username: username,
-              walletAddress: walletAddress || undefined,
-              createdAt: new Date().toISOString(),
-              lastLogin: new Date().toISOString(),
-              avatar: userData.avatar || DEFAULT_AVATAR
-            }
-            localStorage.setItem('flipflop-user', JSON.stringify(newUser))
-            
-            // Set initial points and starter pack availability
-            const bankPoints = userData.bankPoints || 10000
-            localStorage.setItem('flipflop-points', String(bankPoints))
-            localStorage.setItem('flipflop-starter-available', '1')
-            
-            setSuccess('Registration successful! You received 10,000 points and 1 starter pack!')
-            setTimeout(() => router.push('/'), 1500)
-            return
-          }
-        } catch (err) {
-          console.error('Registration error:', err)
-        }
-
-        // Fallback: Local storage registration
-        const existingUsers = JSON.parse(localStorage.getItem('flipflop-users') || '[]')
-        const existingUser = existingUsers.find((u: User) => u.username === username)
-        if (existingUser) {
-          setError('Username already exists')
-          setLoading(false)
-          return
-        }
-
-        const newUser: User = {
-          id: userId,
-          username: username,
-          walletAddress: walletAddress || undefined,
-          createdAt: new Date().toISOString(),
-          lastLogin: new Date().toISOString(),
-          avatar: DEFAULT_AVATAR
-        }
-
-        existingUsers.push(newUser)
-        localStorage.setItem('flipflop-users', JSON.stringify(existingUsers))
-        localStorage.setItem('flipflop-user', JSON.stringify(newUser))
-        localStorage.setItem('flipflop-points', '50000')
-        localStorage.setItem('flipflop-starter-available', '1')
-        
-        setSuccess('Registration successful! You received 50,000 points and 1 starter pack!')
-        setTimeout(() => router.push('/'), 1500)
+          setError(j.error || 'Authentication failed')
       }
+
     } catch (err: any) {
       setError(err.message || 'An error occurred')
     } finally {
@@ -317,11 +235,8 @@ export default function Auth(){
               color: 'rgba(255,255,255,0.9)',
               lineHeight: 1.6
             }}>
-              <div style={{marginBottom: 8}}>
-                <strong style={{color: '#86efac'}}>50,000 Points</strong> - Start trading immediately
-              </div>
               <div>
-                <strong style={{color: '#86efac'}}>1 Starter Pack</strong> - Get 5 random cards to begin
+                <strong style={{color: '#86efac'}}>10,000 Gift Points</strong> – Spend them on card packs or Arena Royale rooms (gift points never count toward the leaderboard)
               </div>
             </div>
             <div style={{
