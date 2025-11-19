@@ -112,15 +112,15 @@ export default function Arena(){
         setPoints(prev => {
           // Only update if points actually changed
           if (prev !== newPoints) {
-            try {
-              localStorage.setItem('flipflop-points', String(newPoints))
-            } catch {}
             return newPoints
           }
           return prev
         })
         if (j.user.giftPoints !== undefined) {
           setGiftPoints(j.user.giftPoints)
+        }
+        if (j.user.inventory) {
+            setInventory(j.user.inventory)
         }
       }
     }catch{}
@@ -131,38 +131,47 @@ export default function Arena(){
 
   useEffect(()=>{
     let mounted = true
-    try{
-      const s = localStorage.getItem('flipflop-user')
-      if (s){ 
-        const u = JSON.parse(s)
-        if (mounted) {
-          setUser(u)
-          loadUserPoints(u)
-        }
-      }
-      const inv = localStorage.getItem('flipflop-inventory')
-      if (inv && mounted) setInventory(JSON.parse(inv))
-      // Also try to load from localStorage as fallback
-      const savedPts = localStorage.getItem('flipflop-points')
-      if (savedPts && mounted) setPoints(parseInt(savedPts) || 0)
-    }catch{}
     
-    let roomInterval: NodeJS.Timeout | null = null
-    if (roomId){
-      loadRoom(roomId)
-      roomInterval = setInterval(()=>{
-        if (mounted) loadRoom(roomId)
-      }, 8000)
-    } else {
-      loadRooms()
-      roomInterval = setInterval(()=>{
-        if (mounted) loadRooms()
-      }, 10000)
+    async function init() {
+        try {
+          const s = localStorage.getItem('flipflop-user')
+          let userId = ''
+          if (s) {
+             try { userId = JSON.parse(s).id } catch {}
+          }
+          
+          if (userId) {
+              // Load fresh user data
+              const r = await fetch(`/api/users/me?userId=${encodeURIComponent(userId)}`)
+              const j = await r.json()
+              if (j.ok && j.user) {
+                  if (mounted) {
+                      setUser(j.user)
+                      setPoints(j.user.bankPoints || 0)
+                      setGiftPoints(j.user.giftPoints || 0)
+                      setInventory(j.user.inventory || {})
+                  }
+              }
+          }
+        } catch(e) { console.error(e) }
+        
+        if (mounted) {
+            if (roomId) loadRoom(roomId)
+            else loadRooms()
+        }
     }
+
+    init()
+    
+    const roomInterval = setInterval(() => {
+      if (!mounted) return
+      if (roomId) loadRoom(roomId)
+      else loadRooms()
+    }, 8000)
     
     return ()=>{
       mounted = false
-      if (roomInterval) clearInterval(roomInterval)
+      clearInterval(roomInterval)
     }
   },[roomId])
   
@@ -221,9 +230,6 @@ export default function Arena(){
       const j = await r.json()
       if(!j.ok) throw new Error(j.error||'Grant failed')
       setPoints(j.bankPoints||0)
-      try {
-        localStorage.setItem('flipflop-points', String(j.bankPoints||0))
-      } catch {}
       alert('100,000 test points added to your balance.')
     }catch(e:any){ alert(e?.message||'Grant failed') }
   }
