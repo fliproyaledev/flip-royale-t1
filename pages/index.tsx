@@ -1410,6 +1410,9 @@ useEffect(() => {
     return [] // Empty for fresh start
   }, [])
 
+  const activeRoundDisplay = Math.max(currentRound - 1, 0)
+  const nextRoundDisplay = currentRound
+
   return (
     <div className="app">
       <header className="topbar">
@@ -1660,7 +1663,7 @@ useEffect(() => {
         <div style={{display:'flex', flexDirection:'column', gap:16}}>
       {/* Active Round */}
       <div className="panel">
-        <div className="row">
+        <div className="row" style={{alignItems:'center', gap:12}}>
           <h2 style={{
             fontWeight:900, 
             letterSpacing:1.2, 
@@ -1668,6 +1671,16 @@ useEffect(() => {
             color: theme === 'light' ? '#0a2c21' : '#f8fafc', 
             textShadow: theme === 'light' ? 'none' : '0 3px 10px rgba(0,0,0,0.35)'
           }}>Active Round</h2>
+          <span className="badge" style={{
+            background:'rgba(255,255,255,0.1)',
+            border:'1px solid rgba(255,255,255,0.2)',
+            color:'#fff',
+            fontWeight:700,
+            fontSize:13,
+            letterSpacing:0.5
+          }}>
+            Round #{activeRoundDisplay}
+          </span>
           {mounted && boostActive && (
             <span className="badge" style={{
               background: 'rgba(0,207,163,.2)',
@@ -1876,13 +1889,25 @@ useEffect(() => {
 
         {/* Next Round */}
       <div className="panel">
-        <h2 style={{
-          fontWeight:900, 
-          letterSpacing:1.2, 
-          textTransform:'uppercase', 
-          color: theme === 'light' ? '#0a2c21' : '#f8fafc', 
-            textShadow: theme === 'light' ? 'none' : '0 3px 10px rgba(0,0,0,0.35)'
-        }}>Next Round</h2>
+        <div className="row" style={{alignItems:'center', gap:12}}>
+          <h2 style={{
+            fontWeight:900, 
+            letterSpacing:1.2, 
+            textTransform:'uppercase', 
+            color: theme === 'light' ? '#0a2c21' : '#f8fafc', 
+              textShadow: theme === 'light' ? 'none' : '0 3px 10px rgba(0,0,0,0.35)'
+          }}>Next Round</h2>
+          <span className="badge" style={{
+            background:'rgba(255,255,255,0.1)',
+            border:'1px solid rgba(255,255,255,0.2)',
+            color:'#fff',
+            fontWeight:700,
+            fontSize:13,
+            letterSpacing:0.5
+          }}>
+            Round #{nextRoundDisplay}
+          </span>
+        </div>
         <div className="sep"></div>
 
         <div className="picks" style={{display:'grid', gridTemplateColumns:'repeat(5, minmax(160px, 1fr))', gap:14}}>
