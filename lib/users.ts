@@ -43,6 +43,9 @@ export type UserRecord = {
   nextRound?: RoundPick[]
   currentRound?: number
   lastSettledDay?: string
+  inventory?: Record<string, number>
+  lastDailyPack?: string
+  roundHistory?: any[]
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -169,7 +172,8 @@ export function getOrCreateUser(map: Record<string, UserRecord>, userId: string)
       updatedAt: now,
       activeRound: [],
       nextRound: Array(5).fill(null) as any,
-      currentRound: 1
+      currentRound: 1,
+      inventory: {}
     }
     map[userId] = user
   }
@@ -182,6 +186,8 @@ export function getOrCreateUser(map: Record<string, UserRecord>, userId: string)
   if (!Array.isArray(user.activeRound)) user.activeRound = []
   if (!Array.isArray(user.nextRound)) user.nextRound = Array(5).fill(null) as any
   if (!user.currentRound) user.currentRound = 1
+  if (!user.inventory || typeof user.inventory !== 'object') user.inventory = {}
+  if (!Array.isArray(user.roundHistory)) user.roundHistory = []
 
   return user
 }
