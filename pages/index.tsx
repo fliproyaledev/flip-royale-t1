@@ -36,8 +36,6 @@ function msUntilNextUtcMidnight(): number {
   return next.getTime() - now.getTime()
 }
 
-function randInt(n:number){ return Math.floor(Math.random()*n) }
-function makeRandom5(tokens:Token[]){ return Array.from({length:5},()=>tokens[randInt(tokens.length)].id) }
 async function getPrice(tokenId: string) { const r = await fetch(`/api/price?token=${encodeURIComponent(tokenId)}`); return r.json() as Promise<{p0:number; pLive:number; pClose:number; ts:string; changePct?:number; source?:'dexscreener'|'fallback'}> }
 
 function formatRemaining(ms: number): string {
@@ -114,7 +112,6 @@ export default function Home(){
   const [nextRound, setNextRound] = useState<RoundPick[]>(Array(5).fill(null))
   const [nextRoundLoaded, setNextRoundLoaded] = useState(false) // Flag to prevent overwriting loaded data
   const [nextRoundSaved, setNextRoundSaved] = useState(false) // Flag to track if picks are saved
-  const [currentPack, setCurrentPack] = useState<{ dayKey:string; cards:string[]; opened:boolean } | null>(null)
   const [prices, setPrices] = useState<Record<string,{p0:number;pLive:number;pClose:number;changePct?:number;source?:'dexscreener'|'fallback'}>>({})
   const [reveals, setReveals] = useState([false,false,false,false,false])
   const [boost, setBoost] = useState<{ level:0|50|100; endAt?:number }>({ level:0 })
@@ -123,7 +120,6 @@ export default function Home(){
   const [boostNext, setBoostNext] = useState<0|50|100>(0)
   const [history, setHistory] = useState<DayResult[]>([])
   const [showSummary, setShowSummary] = useState<{open:boolean; items:DayResult|null}>({open:false, items:null})
-  const [showPackResults, setShowPackResults] = useState(false)
   const [modalOpen, setModalOpen] = useState<{open:boolean; type:'select'|'summary'|'pack'}>({open:false, type:'select'})
   const [modalSearch, setModalSearch] = useState('')
   const [showRoundResults, setShowRoundResults] = useState<{open: boolean; results: RoundResult[]}>({open: false, results: []})
@@ -134,7 +130,6 @@ export default function Home(){
   const [giftPoints, setGiftPoints] = useState<number>(0)
   const [buyQty, setBuyQty] = useState<number>(1)
   const [showMysteryResults, setShowMysteryResults] = useState<{open:boolean; cards:string[]}>({open:false, cards:[]})
-  const [starterAvailable, setStarterAvailable] = useState(false)
   const [globalHighlights, setGlobalHighlights] = useState<HighlightState>({ topGainers: [], topLosers: [] })
 
 const DEFAULT_AVATAR = '/avatars/default-avatar.png'
@@ -148,15 +143,12 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
     // CRITICAL: Do NOT reset nextRound here - preserve user's saved picks
     // setNextRound(Array(5).fill(null))
     setPrices({})
-    setCurrentPack(null)
-    setShowPackResults(false)
     setShowRoundResults({ open: false, results: [] })
     setShowMysteryResults({ open: false, cards: [] })
     setGlobalHighlights({ topGainers: [], topLosers: [] })
     setShowSummary({ open: false, items: null })
     setModalOpen({ open: false, type: 'select' })
     setModalSearch('')
-    setStarterAvailable(false)
     setPoints(0)
     setCurrentRound(1)
     setBoost({ level: 0 })
@@ -172,8 +164,6 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
         // 'flipflop-next',
         'flipflop_state',
         'flipflop-current-round',
-        'flipflop-current-pack',
-        'flipflop-starter-available',
         'flipflop-points',
         'flipflop-global-highlights',
         'flipflop-has-started'
@@ -681,7 +671,8 @@ useEffect(() => {
 
   // Boost countdown timer
   // Persist points
-  useEffect(()=>{ try { localStorage.setItem('flipflop-points', String(points)) } catch {} },[points])
+  // Removed points sync to localStorage
+  // useEffect(()=>{ try { localStorage.setItem('flipflop-points', String(points)) } catch {} },[points])
 
   async function buyMysteryPacks(){
     if (!user) { alert('Please log in first.'); return }
@@ -724,9 +715,10 @@ useEffect(() => {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Accept': 'application/json'
+          'Accept': 'application/json',
+          'x-user-id': user.id
         },
-        body: JSON.stringify({ userId: user.id, cost, packType: 'mystery' })
+        body: JSON.stringify({ count: qty })
       })
       
       if (!r.ok) {
@@ -751,20 +743,25 @@ useEffect(() => {
         alert(j.error || 'Purchase failed')
         return
       }
-      
-      // Update points from server response
-      setPoints(j.bankPoints || 0)
-      if (j.giftPoints !== undefined) {
-        setGiftPoints(j.giftPoints)
+
+      const updatedUser = j.user
+      if (updatedUser) {
+        if (typeof updatedUser.bankPoints === 'number') {
+          setPoints(updatedUser.bankPoints)
+        }
+        if (typeof updatedUser.giftPoints === 'number') {
+          setGiftPoints(updatedUser.giftPoints)
+        }
+        if (updatedUser.inventory && typeof updatedUser.inventory === 'object') {
+          setInventory(updatedUser.inventory)
+        }
       }
-      try {
-        localStorage.setItem('flipflop-points', String(j.bankPoints || 0))
-      } catch {}
-      
-      // Generate cards: random 5 per pack
-      const totalCards = qty * 5
-      const cards: string[] = Array.from({length: totalCards}, ()=> TOKENS[randInt(TOKENS.length)].id)
-      setShowMysteryResults({open:true, cards})
+
+      if (Array.isArray(j.newCards) && j.newCards.length > 0) {
+        setShowMysteryResults({ open: true, cards: j.newCards })
+      } else {
+        setShowMysteryResults({ open: true, cards: [] })
+      }
     } catch (e: any) {
       console.error('Purchase error:', e)
       alert(e?.message || 'Purchase failed. Please try again.')
@@ -773,21 +770,9 @@ useEffect(() => {
 
   function addMysteryToInventory(){
     if (!showMysteryResults.open) return
-    const newInv = { ...inventory }
-    showMysteryResults.cards.forEach(id => { newInv[id] = (newInv[id]||0)+1 })
-    setInventory(newInv)
     setShowMysteryResults({open:false, cards:[]})
   }
 
-
-  function claimStarterReward(force = false) {
-    if (!starterAvailable && !force) return
-    setStarterAvailable(false)
-    try { localStorage.setItem('flipflop-starter-available','0') } catch {}
-    // Points are granted at registration; only open the pack here
-    const cards: string[] = makeRandom5(TOKENS)
-    setShowMysteryResults({open:true, cards})
-  }
 
   async function snapshotGlobalHighlights() {
     // Fetch prices for all tokens to populate Global Movers
@@ -949,87 +934,72 @@ useEffect(() => {
     return () => { cancelled = true; clearInterval(handle) }
   }, [active, nextRound])
 
-  useEffect(()=>{
-    const savedInventory = localStorage.getItem('flipflop-inventory')
-    
-    if (savedInventory) {
-      setInventory(JSON.parse(savedInventory))
-    }
-    // Clear history for fresh start - Beta Round 1
-    setHistory([])
-    const savedHighlights = localStorage.getItem('flipflop-global-highlights')
-    if (savedHighlights) {
-      try {
-        const parsed = JSON.parse(savedHighlights)
-        if (parsed?.topGainers && parsed?.topLosers) {
-          setGlobalHighlights({
-            topGainers: Array.isArray(parsed.topGainers) ? parsed.topGainers : [],
-            topLosers: Array.isArray(parsed.topLosers) ? parsed.topLosers : []
-          })
-        }
-      } catch {}
-    }
-    setInventoryLoaded(true)
-  },[])
+  // Load user data from API
+  async function loadUserData() {
+    try {
+      // Initial check for user ID (still locally cached for session)
+      const savedUser = localStorage.getItem('flipflop-user')
+      let userId = ''
+      if (savedUser) {
+          try { userId = JSON.parse(savedUser).id } catch {}
+      }
+      
+      if (!userId) return
 
-  useEffect(()=>{
-    if (!inventoryLoaded) return
-    localStorage.setItem('flipflop-inventory', JSON.stringify(inventory))
-  },[inventory, inventoryLoaded])
+      const r = await fetch(`/api/users/me?userId=${encodeURIComponent(userId)}`)
+      const data = await r.json()
+      
+      if (data.ok && data.user) {
+          setUser(data.user)
+          if (data.user.inventory) setInventory(data.user.inventory)
+          
+          // Load rounds
+          if (Array.isArray(data.user.activeRound)) setActive(data.user.activeRound)
+          if (Array.isArray(data.user.nextRound)) {
+             setNextRound(data.user.nextRound)
+             // If loaded from server, it is saved
+             setNextRoundSaved(true)
+          }
+          
+          // Points
+          if (typeof data.user.bankPoints === 'number') {
+              setPoints(data.user.bankPoints)
+          }
+          if (typeof data.user.giftPoints === 'number') {
+              setGiftPoints(data.user.giftPoints)
+          }
 
-  useEffect(()=>{
-    if (!inventoryLoaded) return
-    localStorage.setItem('flipflop-history', JSON.stringify(history))
-  },[history, inventoryLoaded])
+          setInventoryLoaded(true)
+          setStateLoaded(true)
+          setNextRoundLoaded(true)
+          
+          // Daily Pack Check
+          const today = new Date().toISOString().slice(0, 10)
+          if (data.user.lastDailyPack !== today) {
+               const newPack = {
+                dayKey: utcDayKey(),
+                cards: [], 
+                opened: false
+              }
+              setCurrentPack(newPack)
+          } else {
+              setCurrentPack(null)
+          }
+      }
+    } catch(e) {
+        console.error("Load failed", e)
+    }
+  }
 
   useEffect(() => {
-    if (!stateLoaded) return
-    try { localStorage.setItem('flipflop-global-highlights', JSON.stringify(globalHighlights)) } catch {}
-  }, [globalHighlights, stateLoaded])
-
-  useEffect(()=>{
-    if (!stateLoaded) return
-    localStorage.setItem('flipflop-current-round', currentRound.toString())
-  },[currentRound, stateLoaded])
-
-  // Persist active and nextRound to avoid losing state between page navigations
-  useEffect(() => { 
-    if (!stateLoaded) return
-    try { 
-      localStorage.setItem('flipflop-active', JSON.stringify(active))
-    } catch (e) {
-      console.warn('Failed to save active round:', e)
-    }
-  }, [active, stateLoaded])
-  
-  // Keep nextRound synchronized with localStorage automatically as a safety net.
-  // Users can still click "Save Picks" for explicit confirmation, but this ensures
-  // background persistence (useful if they forget to save or navigate quickly).
-  useEffect(() => { 
-    if (!stateLoaded || !nextRoundLoaded) return
-    try { 
-      const serialized = JSON.stringify(nextRound)
-      localStorage.setItem('flipflop-next', serialized)
-      console.log('💾 [AUTO] nextRound synced to localStorage:', serialized)
-    } catch (e) {
-      console.error('⚠️ [AUTO] Failed to auto-save nextRound:', e)
-    }
-  }, [nextRound, stateLoaded, nextRoundLoaded])
-  useEffect(() => { // Combined state for compatibility
-    if (!stateLoaded || !inventoryLoaded) return
-    try {
-      const combined = { active, nextRound, inventory }
-      localStorage.setItem('flipflop_state', JSON.stringify(combined))
-    } catch {}
-  }, [active, nextRound, inventory, stateLoaded, inventoryLoaded])
-
-  useEffect(()=>{
-    // Only load existing pack; do not auto-create daily gifts
-    const savedPack = localStorage.getItem('flipflop-current-pack')
-    if (savedPack) {
-      try { setCurrentPack(JSON.parse(savedPack)) } catch {}
-    }
+    loadUserData()
+    
+    // Fetch global highlights if needed (could be another API)
+    // For now, we might skip highlights persistence or move to API later
   }, [])
+
+  // Removed localStorage effects
+
 
   function nextCount(tokenId: string) {
     return nextRound.filter(p => p && p.tokenId === tokenId).length
@@ -1074,14 +1044,13 @@ useEffect(() => {
     setNextRoundSaved(false) // Mark as unsaved when modified
   }
 
-  function saveNextRoundPicks() {
+  async function saveNextRoundPicks() {
+    if (!user?.id) return
+
     try {
-      // CRITICAL: Use a function to get the latest nextRound state
-      // This ensures we're saving the most current data
       setNextRound(currentNextRound => {
         // Validate nextRound before saving
         if (!Array.isArray(currentNextRound) || currentNextRound.length !== 5) {
-          console.error('❌ [SAVE] Invalid nextRound structure:', currentNextRound)
           alert('Invalid picks data. Please try selecting cards again.')
           return currentNextRound
         }
@@ -1093,7 +1062,7 @@ useEffect(() => {
           return currentNextRound
         }
         
-        // Deep clone to ensure we're saving the actual data
+        // Prepare data
         const dataToSave = currentNextRound.map(p => {
           if (p === null) return null
           return {
@@ -1104,35 +1073,23 @@ useEffect(() => {
           }
         })
         
-        const serialized = JSON.stringify(dataToSave)
-        console.log('💾 [SAVE] Serializing nextRound:', dataToSave)
-        console.log('💾 [SAVE] Serialized string:', serialized)
-        
-        localStorage.setItem('flipflop-next', serialized)
-        // Mark as explicitly saved
-        localStorage.setItem('flipflop-next-saved', 'true')
-        
-        // Verify it was saved
-        const verify = localStorage.getItem('flipflop-next')
-        console.log('🔍 [SAVE] Verification read from localStorage:', verify)
-        
-        if (verify !== serialized) {
-          console.error('❌ [SAVE] Save verification failed!')
-          console.error('Expected:', serialized)
-          console.error('Got:', verify)
-          alert('Save verification failed. Please try again.')
-          return currentNextRound
-        }
-        
-        setNextRoundLoaded(true)
-        setNextRoundSaved(true) // Mark as saved
-        
-        console.log('✅ [SAVE] Successfully saved nextRound to localStorage')
-        console.log('✅ [SAVE] Saved data:', JSON.parse(serialized))
-        console.log('✅ [SAVE] Verification: localStorage contains data')
-        
-        // Show success feedback
-        alert(`Picks saved successfully! ${filledCount}/5 cards selected.`)
+        // Call API
+        fetch('/api/round/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                userId: user.id,
+                nextRound: dataToSave
+            })
+        }).then(r => r.json()).then(d => {
+            if (d.ok) {
+                setNextRoundLoaded(true)
+                setNextRoundSaved(true)
+                alert(`Picks saved successfully! ${filledCount}/5 cards selected.`)
+            } else {
+                alert('Failed to save picks: ' + (d.error || 'Unknown error'))
+            }
+        })
         
         return currentNextRound
       })
@@ -1144,17 +1101,15 @@ useEffect(() => {
 
   function enableEditing() {
     setNextRoundSaved(false)
-    localStorage.removeItem('flipflop-next-saved') // Clear saved flag when editing
     console.log('🔄 [CHANGE] User wants to modify picks')
   }
 
   function changeNextRoundPicks() {
     setNextRoundSaved(false)
-    localStorage.removeItem('flipflop-next-saved') // Clear saved flag when editing
     console.log('🔄 [CHANGE] User wants to modify picks')
   }
 
-  function toggleLock(index: number) {
+  async function toggleLock(index: number) {
     const newActive = [...active]
     const pick = newActive[index]
     if (pick && !pick.locked) {
@@ -1171,7 +1126,22 @@ useEffect(() => {
         pick.pLock = priceData.p0 // Store baseline for locked cards
       }
       setActive(newActive)
-      try { localStorage.setItem('flipflop-active', JSON.stringify(newActive)) } catch {}
+      
+      // Save to server
+      if (user?.id) {
+          try {
+              await fetch('/api/round/save', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                      userId: user.id,
+                      activeRound: newActive
+                  })
+              })
+          } catch(e) {
+              console.error("Failed to save lock state", e)
+          }
+      }
     }
   }
 
@@ -1193,25 +1163,6 @@ useEffect(() => {
     return calcPoints(p0, pNow, pick.dir, pick.duplicateIndex, boost.level, boostActive)
   }
 
-  function openPack() {
-    if (currentPack && !currentPack.opened) {
-      const updatedPack = {...currentPack, opened: true}
-      setCurrentPack(updatedPack)
-      localStorage.setItem('flipflop-current-pack', JSON.stringify(updatedPack))
-      setShowPackResults(true)
-    }
-  }
-
-  function addPackToInventory() {
-    if (currentPack && currentPack.opened) {
-      const newInventory = {...inventory}
-      currentPack.cards.forEach(cardId => {
-        newInventory[cardId] = (newInventory[cardId] || 0) + 1
-      })
-      setInventory(newInventory)
-      setShowPackResults(false)
-    }
-  }
 
   function calculateRoundResults(): RoundResult[] {
     return active
@@ -1322,43 +1273,16 @@ useEffect(() => {
     // Increment round number
     setCurrentRound(prev => prev + 1)
     
-    // Credit points balance - update server first, then update local state
-    if (user && totalPoints !== 0) {
-      try {
-        const r = await fetch('/api/users/grant', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: user.id, amount: totalPoints })
-        })
-        const j = await r.json()
-        if (j?.ok && j?.bankPoints !== undefined) {
-          setPoints(j.bankPoints)
-          try {
-            localStorage.setItem('flipflop-points', String(j.bankPoints))
-          } catch {}
-        } else {
-          // Fallback: update local state if server update fails
-          setPoints(p => p + totalPoints)
-        }
-      } catch (e) {
-        console.error('Failed to credit points to server:', e)
-        // Fallback: update local state if server update fails
-        setPoints(p => p + totalPoints)
-      }
-    } else {
-      // No user or no points to credit, just update local state
-      setPoints(p => p + totalPoints)
-    }
-
-    snapshotGlobalHighlights()
-    if (roundResults.length > 0) {
+    // Credit points balance & Save History via API
+    if (user && roundResults.length > 0) {
       const dayKey = utcDayKey(new Date())
-      const entry: DayResult = {
+      const entry = {
         dayKey,
-        total: totalPoints,
-        userId: user?.id,
-        userName: user?.username,
-        walletAddress: user?.walletAddress,
+        totalPoints, // Backend expects totalPoints
+        total: totalPoints, // Frontend legacy might expect total
+        userId: user.id,
+        userName: user.username,
+        walletAddress: user.walletAddress,
         items: roundResults.map(result => ({
           tokenId: result.tokenId,
           symbol: result.symbol,
@@ -1367,17 +1291,27 @@ useEffect(() => {
           points: result.points
         }))
       }
-      setHistory(prev => {
-        const updated = [entry, ...prev]
-        return updated.slice(0, 30)
-      })
-      // Save to localStorage
-      try {
-        const currentHistory = JSON.parse(localStorage.getItem('flipflop-history') || '[]')
-        const updatedHistory = [entry, ...currentHistory].slice(0, 30)
-        localStorage.setItem('flipflop-history', JSON.stringify(updatedHistory))
-      } catch {}
+
+      // Optimistic update
+      setPoints(p => p + totalPoints)
+      setHistory(prev => [entry as any, ...prev].slice(0, 30))
+
+      // Call API
+      fetch('/api/users/save-round-result', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: user.id, result: entry })
+      }).then(r => r.json()).then(j => {
+          if (j.ok && j.user) {
+             setPoints(j.user.bankPoints)
+             // Update history from server if available
+             // if (j.user.roundHistory) setHistory(j.user.roundHistory)
+          }
+      }).catch(e => console.error('Failed to save round result', e))
     }
+
+    snapshotGlobalHighlights()
+
     // Fetch fresh prices for new active round tokens to set baseline (p0)
     // This ensures p0 is the 24h ago price when the new round starts
     const newActiveTokenIds = nextRound
@@ -1740,16 +1674,6 @@ useEffect(() => {
           )}
           </div>
         <div className="sep"></div>
-
-        {/* Starter Reward Banner */}
-        {starterAvailable && (
-          <div className="panel" style={{marginBottom: 12, background:'linear-gradient(135deg, rgba(34,197,94,0.15), rgba(132,204,22,0.15))', border:'1px solid rgba(34,197,94,0.3)'}}>
-            <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:12}}>
-              <div style={{fontWeight:900, color:'#bbf7d0'}}>🎁 Starter Reward available: 10,000 points + 1 Common Pack</div>
-              <button className="btn primary" onClick={() => claimStarterReward()}>Claim</button>
-        </div>
-          </div>
-        )}
 
         <div className="picks" style={{display:'grid', gridTemplateColumns:'repeat(5, minmax(160px, 1fr))', gap:14}}>
               {active.map((p, index) => {
@@ -2613,181 +2537,6 @@ useEffect(() => {
         </div>
       )}
 
-      {/* Pack Results Modal */}
-      {showPackResults && currentPack && (
-        <div className="modal-backdrop" onClick={() => setShowPackResults(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{maxWidth: 1100, width: '96%'}}>
-            <div className="modal-header">
-              <h3 style={{color: 'white', fontSize: 20, fontWeight: 700}}>Pack Results</h3>
-              <button onClick={() => setShowPackResults(false)} style={{background: 'none', border: 'none', color: 'white', fontSize: 20, cursor: 'pointer'}}>×</button>
-            </div>
-            
-            {/* Tear strip animation */}
-            <div style={{
-              height: 8,
-              width: '100%',
-              background: 'linear-gradient(90deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.05) 100%)',
-              borderRadius: 4,
-              marginBottom: 12,
-              position: 'relative',
-              overflow: 'hidden',
-              animation: 'tear-move 450ms ease-out'
-            }} />
-
-            <div style={{display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 20, marginBottom: 24}}>
-              {currentPack.cards.map((cardId, index) => {
-                const tok = getTokenById(cardId) || TOKENS[0]
-                
-                return (
-                  <div key={index} style={{
-                    background: `linear-gradient(135deg, ${getGradientColor(index)}, ${getGradientColor(index + 1)})`,
-                    borderRadius: 24,
-                    padding: 28,
-                    position: 'relative',
-                    minHeight: 320,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                    border: '2px solid rgba(255,255,255,0.18)',
-                    boxShadow: '0 16px 48px rgba(0,0,0,0.22), 0 6px 24px rgba(0,0,0,0.12)',
-                    transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-                    transform: 'translateY(0)',
-                    animation: `card-fly-in 400ms ease-out ${(index)*120}ms both`,
-                    cursor: 'pointer'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-8px) scale(1.03)';
-                    e.currentTarget.style.boxShadow = '0 22px 66px rgba(0,0,0,0.28), 0 10px 34px rgba(0,0,0,0.16)';
-                    e.currentTarget.style.border = '2px solid rgba(255,255,255,0.3)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = '0 16px 48px rgba(0,0,0,0.22), 0 6px 24px rgba(0,0,0,0.12)';
-                    e.currentTarget.style.border = '2px solid rgba(255,255,255,0.15)';
-                  }}>
-                    <div style={{
-                      position: 'absolute',
-                      top: 12,
-                      right: 12,
-                      background: '#fbbf24',
-                      color: '#000',
-                      padding: '4px 8px',
-                      borderRadius: 6,
-                      fontSize: 11,
-                      fontWeight: 700,
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
-                    }}>
-                      New Card!
-                    </div>
-                    
-                    {/* Token logo */}
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: 'center',
-                      alignItems: 'center',
-                      flex: 1,
-                      marginTop: 16
-                    }}>
-                      <div style={{
-                      width: 140,
-                      height: 140,
-                        background: 'rgba(255,255,255,0.12)',
-                        borderRadius: '50%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      border: '4px solid rgba(255,255,255,0.25)',
-                        boxShadow: '0 8px 32px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)',
-                        backdropFilter: 'blur(15px)',
-                        position: 'relative',
-                        overflow: 'hidden'
-                      }}>
-                        {/* Glow effect */}
-                        <div style={{
-                          position: 'absolute',
-                          top: '50%',
-                          left: '50%',
-                          transform: 'translate(-50%, -50%)',
-                          width: '120%',
-                          height: '120%',
-                          background: 'radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%)',
-                          borderRadius: '50%',
-                          filter: 'blur(20px)'
-                        }} />
-                        
-                        <img
-                          src={tok.logo}
-                          alt={tok.symbol} 
-                          style={{
-                        width: 120,
-                        height: 120,
-                            borderRadius: '50%',
-                            objectFit: 'cover',
-                            filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.4))',
-                            position: 'relative',
-                            zIndex: 2,
-                        border: '3px solid rgba(255,255,255,0.25)'
-                          }}
-                        onError={handleImageFallback}
-                        />
-                      </div>
-                    </div>
-                    
-                    {/* Token info */}
-                    <div style={{textAlign: 'center', marginTop: 16}}>
-                      <div style={{
-                        fontSize: 24,
-                        fontWeight: 900,
-                        color: 'white',
-                        textShadow: '0 3px 8px rgba(0,0,0,0.45)',
-                        marginBottom: 6,
-                        letterSpacing: 1.2,
-                        textTransform: 'uppercase'
-                      }}>
-                        {tok.symbol}
-                      </div>
-                      <div style={{
-                        fontSize: 15,
-                        color: 'rgba(255,255,255,0.9)',
-                        marginBottom: 6,
-                        fontWeight: 600
-                      }}>
-                        {tok.name}
-                      </div>
-                      {tok.about && (
-                        <div style={{
-                          fontSize: 11,
-                          color: 'rgba(255,255,255,0.75)',
-                          letterSpacing: 2,
-                          textTransform: 'uppercase'
-                        }}>
-                          {tok.about}
-                        </div>
-                      )}
-                    </div>
-    </div>
-  )
-              })}
-            </div>
-            
-            <div style={{textAlign: 'center'}}>
-              <button 
-                className="btn primary big" 
-                onClick={addPackToInventory}
-                style={{marginRight: 12}}
-              >
-                Add to Inventory
-              </button>
-              <button 
-                className="btn" 
-                onClick={() => setShowPackResults(false)}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Mystery Pack Results Modal */}
       {showMysteryResults.open && (
