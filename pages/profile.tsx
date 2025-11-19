@@ -35,49 +35,29 @@ export default function Profile(){
   useEffect(() => {
     setMounted(true)
     
-    // Check if user is logged in
-    const savedUser = localStorage.getItem('flipflop-user')
-    if (savedUser) {
-      const parsed = JSON.parse(savedUser)
-      if (!parsed.avatar) {
-        parsed.avatar = DEFAULT_AVATAR
-      }
-      parsed.lastLogin = Date.now()
-      try { localStorage.setItem('flipflop-user', JSON.stringify(parsed)) } catch {}
-      setUser(parsed)
-    } else {
-      // Redirect to auth if not logged in
-      window.location.href = '/auth'
-      return
-    }
-
-    // Load history
-    const savedHistory = localStorage.getItem('flipflop-history')
-    if (savedHistory) {
-      try {
-        const parsed = JSON.parse(savedHistory)
-        if (Array.isArray(parsed)) {
-          const normalized: RoundHistory[] = parsed.map((round: any) => {
-            const items = Array.isArray(round?.items) ? round.items : Array.isArray(round?.picks) ? round.picks : []
-            return {
-              dayKey: String(round?.dayKey || round?.date || new Date().toISOString()),
-              picks: items.map((item: any) => ({
-                symbol: String(item?.symbol || item?.tokenId || '').toUpperCase(),
-                direction: item?.direction === 'DOWN' || item?.dir === 'DOWN' ? 'DOWN' : 'UP',
-                points: Number(item?.points || 0),
-                duplicateIndex: Number.isFinite(item?.duplicateIndex) ? Number(item.duplicateIndex) : 1
-              })),
-              totalPoints: Number(round?.totalPoints ?? round?.total ?? 0),
-              boostLevel: Number(round?.boostLevel || 0),
-              boostActive: Boolean(round?.boostActive)
-            }
-          })
-          setHistory(normalized)
+    async function load() {
+        const savedUser = localStorage.getItem('flipflop-user')
+        let userId = ''
+        if (savedUser) {
+            try { userId = JSON.parse(savedUser).id } catch {}
         }
-      } catch {
-        setHistory([])
-      }
+        if (!userId) {
+             window.location.href = '/auth'
+             return
+        }
+        
+        try {
+            const r = await fetch(`/api/users/me?userId=${encodeURIComponent(userId)}`)
+            const j = await r.json()
+            if (j.ok && j.user) {
+                setUser(j.user)
+                if (Array.isArray(j.user.roundHistory)) {
+                    setHistory(j.user.roundHistory)
+                }
+            }
+        } catch(e) { console.error(e) }
     }
+    load()
   }, [])
 
   if (!mounted || !user) {
