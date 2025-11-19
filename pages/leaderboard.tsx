@@ -24,19 +24,25 @@ export default function Leaderboard(){
   useEffect(() => {
     setMounted(true)
     
-    // Check if user is logged in
-    const savedUser = localStorage.getItem('flipflop-user')
-    if (savedUser) {
-      const parsed = JSON.parse(savedUser)
-      if (!parsed.avatar) {
-        parsed.avatar = DEFAULT_AVATAR
-        try { localStorage.setItem('flipflop-user', JSON.stringify(parsed)) } catch {}
-      }
-      setUser(parsed)
+    async function load() {
+        const savedUser = localStorage.getItem('flipflop-user')
+        let userId = ''
+        if (savedUser) {
+            try { userId = JSON.parse(savedUser).id } catch {}
+        }
+        
+        if (userId) {
+            try {
+                const r = await fetch(`/api/users/me?userId=${encodeURIComponent(userId)}`)
+                const j = await r.json()
+                if (j.ok && j.user) {
+                    setUser(j.user)
+                }
+            } catch(e) { console.error(e) }
+        }
+        loadLeaderboard()
     }
-
-    // Load leaderboard data from API
-    loadLeaderboard()
+    load()
   }, [])
 
   async function loadLeaderboard() {
