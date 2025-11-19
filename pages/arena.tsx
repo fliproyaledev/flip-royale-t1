@@ -51,6 +51,7 @@ export default function Arena(){
   const [rooms, setRooms] = useState<DuelRoom[]>([])
   const [room, setRoom] = useState<DuelRoom|null>(null)
   const [points, setPoints] = useState<number>(0)
+  const [earnedPoints, setEarnedPoints] = useState<number>(0)
   const [giftPoints, setGiftPoints] = useState<number>(0)
   const [inventory, setInventory] = useState<Record<string, number>>({})
   const [selected, setSelected] = useState<PickSel[]>([])
@@ -116,6 +117,9 @@ export default function Arena(){
           }
           return prev
         })
+        if (typeof j.user.totalPoints === 'number') {
+          setEarnedPoints(j.user.totalPoints)
+        }
         if (j.user.giftPoints !== undefined) {
           setGiftPoints(j.user.giftPoints)
         }
@@ -149,6 +153,9 @@ export default function Arena(){
                       setUser(j.user)
                       setPoints(j.user.bankPoints || 0)
                       setGiftPoints(j.user.giftPoints || 0)
+                      if (typeof j.user.totalPoints === 'number') {
+                        setEarnedPoints(j.user.totalPoints)
+                      }
                       setInventory(j.user.inventory || {})
                   }
               }
@@ -478,7 +485,7 @@ export default function Arena(){
                   textShadow: '0 1px 2px rgba(0,0,0,0.3)',
                   whiteSpace: 'nowrap'
                 }}>
-                  {(points - giftPoints).toLocaleString()} pts
+                  {earnedPoints.toLocaleString()} pts
                 </div>
                 {giftPoints > 0 && (
                   <div style={{
@@ -489,6 +496,13 @@ export default function Arena(){
                     Gift: {giftPoints.toLocaleString()} pts
                   </div>
                 )}
+                <div style={{
+                  fontSize: 11,
+                  color: 'rgba(255,255,255,0.5)',
+                  fontWeight: 500
+                }}>
+                  Spendable: {points.toLocaleString()} pts
+                </div>
               </div>
               
               <button
