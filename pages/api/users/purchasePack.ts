@@ -3,49 +3,47 @@ import { loadUsers, saveUsers, getOrCreateUser, debitBank } from "../../../lib/u
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    // İstek metodu kontrolü
-    if (req.method !== "POST" && req.method !== "GET") {
+    if (req.method !== "POST") {
       return res.status(405).json({ ok: false, error: "Method not allowed" })
     }
 
-    // FRONTEND user parametresi GÖNDERMİYOR → biz otomatik üretiriz
-    const userId =
-      req.query.user?.toString() ||
-      req.body?.user?.toString() ||
-      req.headers["x-user-id"]?.toString() ||
-      "guest-" + Math.random().toString(36).slice(2, 9)
+    // --- USERID KONTROLÜ (TEK DOĞRU YÖNTEM) ---
+    let userId = req.headers["x-user-id"]?.toString() || ""
 
-    const count = Number(req.query.count || req.body?.count || 1)
+    if (!userId || userId === "null" || userId === "undefined") {
+      // İlk defa pack alan guest kullanıcı
+      userId = "guest-" + Math.random().toString(36).slice(2, 9)
+    }
 
+    const count = Number(req.body?.count || 1)
     if (!Number.isFinite(count) || count <= 0) {
       return res.status(400).json({ ok: false, error: "Invalid count" })
     }
 
-    // Kullanıcıları yükle
-    const map = await loadUsers()
-
-    // User oluştur veya getir
-    const user = getOrCreateUser(map, userId)
-
-    // 1 pack = 5000 points
     const packCost = 5000 * count
 
+    // --- USERS LOAD ---
+    const map = await loadUsers()
+    const user = getOrCreateUser(map, userId)
+
+    // --- POINT CHECK ---
     if (user.bankPoints + user.giftPoints < packCost) {
       return res.status(400).json({ ok: false, error: "Insufficient points" })
     }
 
-    // Puan düş
+    // --- BUY PACK (gift -> bank sıralaması zaten debitBank içinde) ---
     debitBank(user, packCost, "purchase-pack")
 
-    // Kullanıcıyı kaydet
+    // --- SAVE ---
     await saveUsers(map)
 
     return res.json({
       ok: true,
-      user,
       purchased: count,
-      cost: packCost
+      cost: packCost,
+      user
     })
+
   } catch (err: any) {
     return res.status(500).json({ ok: false, error: err.message || "Server error" })
   }
