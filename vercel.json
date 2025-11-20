@@ -11,15 +11,13 @@
   "crons": [
     {
       "path": "/api/cron/settle-rounds",
-      "schedule": "0 0 * * *"
+      "schedule": "0 0 * * *",
       "includeEnvironmentVariables": ["CRON_SECRET"]
-    },
+    }, 
     {
       "path": "/api/cron/settle-arenas",
-      "schedule": "0 0 * * *"
+      "schedule": "0 0 * * *",
       "includeEnvironmentVariables": ["CRON_SECRET"]
     }
   ]
 }
-
-
