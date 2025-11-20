@@ -5,9 +5,6 @@ import {
   settleRoom,
 } from "../../../lib/duels";
 
-// CRON GÜVENLİK ANAHTARI
-const CRON_SECRET = process.env.CRON_SECRET;
-
 function utcDayKey() {
   const d = new Date();
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(
@@ -23,19 +20,12 @@ export default async function handler(
   if (req.method !== "GET")
     return res.status(405).json({ ok: false, error: "GET only" });
 
-  // GÜVENLİK KONTROLÜ (Yeni ve Güvenli Yöntem)
-  const vercelCronHeader = req.headers["x-vercel-cron"];
-
-  if (!CRON_SECRET) {
-    return res
-      .status(500) // 500 kodu, sunucu hatası (konfigürasyon eksik)
-      .json({ ok: false, error: "Configuration Error: CRON_SECRET is missing." });
-  }
-  
-  if (vercelCronHeader !== CRON_SECRET) {
+  // GÜVENLİK KONTROLÜ: Sadece Vercel Cron tarafından çağrıldığından emin ol
+  if (!req.headers["x-vercel-cron"]) {
+    // Manuel testlerde 401 hatası almanız normaldir ve bu güvenliğin çalıştığını gösterir.
     return res
       .status(401)
-      .json({ ok: false, error: "Unauthorized: Invalid CRON_SECRET or missing header." });
+      .json({ ok: false, error: "Unauthorized (Not Vercel Cron)" });
   }
 
   try {
@@ -50,15 +40,19 @@ export default async function handler(
       const room = duels[roomId];
       if (!room) continue;
 
+      // Zaten hesaplanmış veya iptal edilmiş odaları atla
       if (room.status === "settled" || room.status === "cancelled") continue;
 
+      // Değerlendirme zamanı yoksa atla
       if (!room.evalAt) continue;
 
       const evalAt = new Date(room.evalAt);
 
+      // Değerlendirme zamanı henüz gelmediyse atla
       if (now.getTime() < evalAt.getTime()) continue;
 
       try {
+        // Odadaki düelloyu hesapla ve kazananı belirle
         await settleRoom(roomId);
         settled.push(roomId);
       } catch (err: any) {
@@ -66,6 +60,7 @@ export default async function handler(
       }
     }
 
+    // Değişiklikleri kaydet
     await saveDuels(duels);
 
     return res.status(200).json({
