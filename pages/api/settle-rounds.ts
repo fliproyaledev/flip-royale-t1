@@ -4,9 +4,9 @@ import {
   saveUsers,
   creditGamePoints,
   type RoundPick,
-} from "../../../lib/users";
+} from "../../lib/users";
 
-import { getPriceForToken } from "../../../lib/price";
+import { getPriceForToken } from "../../lib/price";
 
 // ---------------- Utility ----------------
 
@@ -157,3 +157,4 @@ export default async function handler(
     return res.status(500).json({ ok: false, error: err.message });
   }
 }
+
