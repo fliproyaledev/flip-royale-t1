@@ -459,8 +459,7 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
   }, [])
 
   useEffect(()=>{ const id=setInterval(()=>setNow(Date.now()), 4000); return ()=>clearInterval(id) },[])
-
-  // UTC 00:00'da otomatik round geçişi
+// UTC 00:00'da Veri Güncelleme (Logic Server-Side işliyor)
   useEffect(() => {
     if (!mounted || !stateLoaded) return
 
@@ -471,20 +470,22 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
       const today = utcDayKey()
       const lastSettled = localStorage.getItem('flipflop-last-settled-day')
       
-      console.log('⏰ [AUTO-SETTLE-CHECK]', {
+      console.log('⏰ [AUTO-DATA-REFRESH-CHECK]', {
         today,
         lastSettled,
-        activeLength: active.length,
-        shouldSettle: lastSettled !== today && active.length > 0,
         currentUTC: new Date().toUTCString()
       })
       
-      // Eğer bugün henüz settle edilmediyse ve active round varsa, settle et
-      if (lastSettled !== today && active.length > 0) {
-        console.log('🔄 [AUTO-SETTLE] UTC 00:00 detected, settling round...')
-        await simulateNewDay()
+      // Eğer lokaldeki tarih, güncel UTC tarihinden farklıysa, sunucudan taze veriyi çek.
+      if (lastSettled !== today) {
+        console.log('🔄 [AUTO-DATA-REFRESH] Yeni gün tespit edildi (UTC 00:00 geçti). Sunucudan güncel veriler çekiliyor...')
+        
+        // KRİTİK DEĞİŞİKLİK: Client tarafında round geçişi veya hesaplama YAPILMAYACAK.
+        // Çünkü hesaplamayı ve tur geçişini zaten Cron Job (Backend) yaptı.
+        await loadUserData() 
+        
         localStorage.setItem('flipflop-last-settled-day', today)
-        console.log('✅ [AUTO-SETTLE] Round settled successfully')
+        console.log('✅ [AUTO-DATA-REFRESH] Veri başarıyla güncellendi.')
       }
     }
 
@@ -496,7 +497,7 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
 
     // UTC 00:00'a kadar bekle, sonra her gün tekrarla
     const msUntilMidnight = msUntilNextUtcMidnight()
-    console.log('⏰ [AUTO-SETTLE] Next UTC 00:00 in', Math.floor(msUntilMidnight / 1000 / 60), 'minutes')
+    console.log('⏰ [AUTO-DATA-REFRESH] Next UTC 00:00 in', Math.floor(msUntilMidnight / 1000 / 60), 'minutes')
     
     const timeoutId = setTimeout(() => {
       checkAndSettle()
@@ -509,7 +510,7 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
       if (intervalId) clearInterval(intervalId)
       if (checkInterval) clearInterval(checkInterval)
     }
-  }, [mounted, stateLoaded, active.length])
+  }, [mounted, stateLoaded]) // active.length dependency kaldırıldı.
 
   // CRITICAL: Force load nextRound from localStorage IMMEDIATELY on mount
   // This runs BEFORE stateLoaded check to ensure data is never lost
