@@ -1,3 +1,4 @@
+import crypto from 'crypto'
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { 
   loadUsers, 
@@ -5,9 +6,19 @@ import {
   creditGamePoints, 
   type RoundPick 
 } from '../../../lib/users'
-
 import { getPriceForToken } from '../../../lib/price'
-import { verifySignature } from '@vercel/cron'     // 🔥 ÖNEMLİ
+
+// --- Verify HMAC signature manually ---
+function verifyVercelSignature(signature: string | undefined, secret: string): boolean {
+  if (!signature) return false
+
+  const expected = crypto
+    .createHmac('sha256', secret)
+    .update('')
+    .digest('hex')
+
+  return signature === expected
+}
 
 // --- Utility: Duplicate Pick Nerf ---
 function nerfFactor(dup: number): number {
@@ -56,25 +67,21 @@ function utcDayKey() {
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
 
-  // VERCEL → CRON HER ZAMAN GET'LE GELİR
   if (req.method !== 'GET')
-    return res.status(405).json({ ok: false, error: 'Only GET allowed' })
+    return res.status(405).json({ ok: false, error: 'GET only' })
 
-  // HMAC SIGNATURE DOĞRULAMA 🔐
+  // --- Manual Vercel Signature Validation ---
   const signature = req.headers['x-vercel-signature'] as string
+  const secret = process.env.CRON_SECRET!
 
-  const valid = await verifySignature(
-    signature,
-    process.env.CRON_SECRET!
-  )
+  const isValid = verifyVercelSignature(signature, secret)
 
-  if (!valid) {
-    return res.status(401).json({ ok: false, error: 'Unauthorized (Bad Signature)' })
+  if (!isValid) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized signature' })
   }
 
   try {
     const today = utcDayKey()
-    console.log(`🔄 [CRON-Rounds] Running for ${today}`)
 
     const users = await loadUsers()
     const settledUsers: string[] = []
@@ -134,7 +141,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         settledUsers.push(user.id)
 
       } catch (e: any) {
-        errors.push({ userId: id, error: e.message || 'Unknown error' })
+        errors.push({ userId: id, error: e.message })
       }
     }
 
@@ -149,6 +156,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     })
 
   } catch (err: any) {
-    return res.status(500).json({ ok: false, error: err.message || 'Internal error' })
+    return res.status(500).json({ ok: false, error: err.message })
   }
 }
