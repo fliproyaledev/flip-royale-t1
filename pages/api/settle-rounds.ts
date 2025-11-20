@@ -7,7 +7,7 @@ import {
   saveUsers, 
   creditGamePoints, 
   type RoundPick 
-} from '../../../lib/users'
+} from '../../lib/users'
 
 import { getPriceForToken } from '../../lib/users'
 
@@ -146,5 +146,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(500).json({ ok: false, error: err.message });
   }
 }
+
 
 
