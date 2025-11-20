@@ -6,7 +6,8 @@ import {
   type RoundPick 
 } from '../../../lib/users'
 
-import { getPriceForToken } from '../../../lib/price'   // 🔥 fetch yerine iç fonksiyon
+import { getPriceForToken } from '../../../lib/price'
+import { verifySignature } from '@vercel/cron'     // 🔥 ÖNEMLİ
 
 // --- Utility: Duplicate Pick Nerf ---
 function nerfFactor(dup: number): number {
@@ -14,7 +15,7 @@ function nerfFactor(dup: number): number {
   if (dup === 2) return 0.75
   if (dup === 3) return 0.5
   if (dup === 4) return 0.25
-  return 0      // 5 ve üstü
+  return 0
 }
 
 function clamp(v: number, min: number, max: number) {
@@ -48,7 +49,6 @@ function calcPoints(
   return Math.round(pts)
 }
 
-// --- UTC KEY ---
 function utcDayKey() {
   const d = new Date()
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`
@@ -56,15 +56,20 @@ function utcDayKey() {
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
 
-  if (req.method !== 'GET' && req.method !== 'POST')
-    return res.status(405).json({ ok: false, error: 'Method Not Allowed' })
+  // VERCEL → CRON HER ZAMAN GET'LE GELİR
+  if (req.method !== 'GET')
+    return res.status(405).json({ ok: false, error: 'Only GET allowed' })
 
-  const isTest = req.query.test === '1'
+  // HMAC SIGNATURE DOĞRULAMA 🔐
+  const signature = req.headers['x-vercel-signature'] as string
 
-  if (process.env.NODE_ENV === 'production' && !isTest) {
-    if (!req.headers['x-vercel-cron']) {
-      return res.status(401).json({ ok: false, error: 'Unauthorized (Not Cron)' })
-    }
+  const valid = await verifySignature(
+    signature,
+    process.env.CRON_SECRET!
+  )
+
+  if (!valid) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized (Bad Signature)' })
   }
 
   try {
