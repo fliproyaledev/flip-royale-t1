@@ -8,9 +8,6 @@ import {
 
 import { getPriceForToken } from "../../../lib/price";
 
-// CRON GÜVENLİK ANAHTARI
-const CRON_SECRET = process.env.CRON_SECRET;
-
 // ---------------- Utility ----------------
 
 function nerfFactor(dup: number): number {
@@ -70,19 +67,12 @@ export default async function handler(
   if (req.method !== "GET")
     return res.status(405).json({ ok: false, error: "GET only" });
 
-  // GÜVENLİK KONTROLÜ (Yeni ve Güvenli Yöntem)
-  const vercelCronHeader = req.headers["x-vercel-cron"];
-
-  if (!CRON_SECRET) {
-    return res
-      .status(500) // 500 kodu, sunucu hatası (konfigürasyon eksik)
-      .json({ ok: false, error: "Configuration Error: CRON_SECRET is missing." });
-  }
-  
-  if (vercelCronHeader !== CRON_SECRET) {
+  // GÜVENLİK KONTROLÜ: Sadece Vercel Cron tarafından çağrıldığından emin ol
+  if (!req.headers["x-vercel-cron"]) {
+    // Manuel testlerde 401 hatası almanız normaldir ve bu güvenliğin çalıştığını gösterir.
     return res
       .status(401)
-      .json({ ok: false, error: "Unauthorized: Invalid CRON_SECRET or missing header." });
+      .json({ ok: false, error: "Unauthorized (Not Vercel Cron)" });
   }
 
   try {
@@ -100,19 +90,23 @@ export default async function handler(
       if (!Array.isArray(user.nextRound))
         user.nextRound = Array(5).fill(null);
 
+      // Eğer kullanıcı bugün zaten hesaplandıysa atla
       if (user.lastSettledDay === today) continue;
 
       try {
         let total = 0;
 
+        // 1. ADIM: Eski Active Round'un Puanlarını Hesapla
         for (const pick of user.activeRound) {
           if (!pick || !pick.tokenId) continue;
 
+          // Eğer kart kilitliyse, kilitli puanı kullan
           if (pick.locked && typeof pick.pointsLocked === "number") {
             total += pick.pointsLocked;
             continue;
           }
 
+          // Eğer kilitli değilse, UTC 00:00'daki kapanış fiyatıyla hesapla
           const price = await getPriceForToken(pick.tokenId);
 
           const pts = calcPoints(
@@ -120,13 +114,14 @@ export default async function handler(
             price.pClose,
             pick.dir,
             pick.duplicateIndex,
-            0,
-            false
+            0, // Boost seviyesi Cron'da 0 varsayıldı
+            false // Boost aktifliği Cron'da false varsayıldı
           );
 
           total += pts;
         }
 
+        // Puanları kullanıcının hesabına yükle
         if (total !== 0) {
           creditGamePoints(
             user,
@@ -136,15 +131,17 @@ export default async function handler(
           );
         }
 
+        // 2. ADIM: Next Round Kartlarını Active Round'a Taşı
         const next = (user.nextRound || []).filter(Boolean) as RoundPick[];
 
         if (next.length > 0) {
           user.activeRound = next;
-          user.nextRound = Array(5).fill(null);
+          user.nextRound = Array(5).fill(null); // Next Round'u sıfırla
         } else {
-          user.activeRound = [];
+          user.activeRound = []; // Next Round boşsa Active Round'u da boşalt
         }
 
+        // Tur ve yerleşim gününü güncelle
         user.currentRound = (user.currentRound || 1) + 1;
         user.lastSettledDay = today;
         user.updatedAt = new Date().toISOString();
@@ -155,6 +152,7 @@ export default async function handler(
       }
     }
 
+    // 3. ADIM: Verileri Kaydet (Upstash/Redis)
     await saveUsers(users);
 
     return res.status(200).json({
