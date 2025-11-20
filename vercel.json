@@ -11,17 +11,11 @@
   "crons": [
     {
       "path": "/api/cron/settle-rounds",
-      "schedule": "0 0 * * *",
-      "headers": { 
-        "Authorization": "Bearer CRON_SECRET"
-      }
+      "schedule": "0 0 * * *"
     },
     {
       "path": "/api/cron/settle-arenas",
-      "schedule": "0 0 * * *",
-      "headers": { 
-        "Authorization": "Bearer CRON_SECRET"
-      }
+      "schedule": "0 0 * * *"
     }
   ]
 }
