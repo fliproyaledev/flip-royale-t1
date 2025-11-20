@@ -68,13 +68,11 @@ export default async function handler(
     return res.status(405).json({ ok: false, error: "GET only" });
 
   // Vercel Cron doğrulaması
-  /*
   if (!req.headers["x-vercel-cron"]) {
     return res
       .status(401)
       .json({ ok: false, error: "Unauthorized (Not Vercel Cron)" });
   }
-  */
 
   try {
     const today = utcDayKey();
@@ -159,6 +157,7 @@ export default async function handler(
     return res.status(500).json({ ok: false, error: err.message });
   }
 }
+
 
 
 
