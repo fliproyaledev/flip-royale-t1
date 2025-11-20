@@ -99,20 +99,16 @@ export async function loadUsers(): Promise<Record<string, UserRecord>> {
 
 export async function saveUsers(map: Record<string, UserRecord>): Promise<void> {
   // KV is primary
-  try {
-    await saveUsersKV(map)
-  } catch (err) {
-    console.warn('KV save failed:', err)
-  }
+  // try-catch bloğunu kaldırdık, hata varsa direkt patlasın ki görelim.
+  await saveUsersKV(map); 
 
-  // VERCEL = no file writes
-  if (IS_VERCEL) return
+  if (IS_VERCEL) return;
 
   try {
-    ensureDir()
-    fs.writeFileSync(USERS_FILE, JSON.stringify(map, null, 2), 'utf8')
+    ensureDir();
+    fs.writeFileSync(USERS_FILE, JSON.stringify(map, null, 2), 'utf8');
   } catch (err) {
-    console.warn('JSON write failed:', err)
+    console.warn('JSON write failed:', err);
   }
 }
 
