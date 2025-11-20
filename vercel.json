@@ -12,12 +12,16 @@
     {
       "path": "/api/cron/settle-rounds",
       "schedule": "0 0 * * *",
-      "includeEnvironmentVariables": ["CRON_SECRET"]
-    }, 
+      "headers": { 
+        "Authorization": "Bearer CRON_SECRET"
+      }
+    },
     {
       "path": "/api/cron/settle-arenas",
       "schedule": "0 0 * * *",
-      "includeEnvironmentVariables": ["CRON_SECRET"]
+      "headers": { 
+        "Authorization": "Bearer CRON_SECRET"
+      }
     }
   ]
 }
