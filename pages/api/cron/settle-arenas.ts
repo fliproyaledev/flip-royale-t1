@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { loadDuels, saveDuels, settleRoom } from '../../../lib/duels'
+import { verifySignature } from '@vercel/cron'   // 🔥 ÖNEMLİ
 
 function utcDayKey(d: Date = new Date()): string {
   const y = d.getUTCFullYear()
@@ -10,18 +11,21 @@ function utcDayKey(d: Date = new Date()): string {
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
 
-  // Allow GET + POST
-  if (req.method !== 'GET' && req.method !== 'POST') {
-    return res.status(405).json({ ok: false, error: 'Method not allowed' })
+  // ✔ Cron GET ile gelir → sadece GET'e izin ver
+  if (req.method !== 'GET') {
+    return res.status(405).json({ ok: false, error: 'Only GET allowed' })
   }
 
-  const isTestMode = req.query.test === '1'
+  // ✔ Vercel HMAC Signature doğrulaması
+  const signature = req.headers['x-vercel-signature'] as string
 
-  // Protect cron in production
-  if (process.env.NODE_ENV === 'production' && !isTestMode) {
-    if (!req.headers['x-vercel-cron']) {
-      return res.status(401).json({ ok: false, error: 'Unauthorized (Not Vercel Cron)' })
-    }
+  const valid = await verifySignature(
+    signature,
+    process.env.CRON_SECRET!
+  )
+
+  if (!valid) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized (Bad Signature)' })
   }
 
   try {
@@ -38,13 +42,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     for (const roomId in duels) {
       const room = duels[roomId]
 
-      // Skip deleted or broken rooms
+      // Skip invalid rooms
       if (!room || typeof room !== 'object') continue
 
-      // Skip rooms already settled or cancelled
-      if (room.status === 'settled' || room.status === 'cancelled') continue
+      // Already finished
+      if (room.status === 'settled' || room.status === 'cancelled')
+        continue
 
-      // Ensure evalAt exists
+      // Missing eval time → auto-cancel
       if (!room.evalAt) {
         console.warn(`⚠️ Room ${roomId} missing evalAt → cancelling`)
         room.status = 'cancelled'
@@ -53,13 +58,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       const evalAt = new Date(room.evalAt)
 
-      // Not ready yet
-      if (now.getTime() < evalAt.getTime()) continue
+      // Not ready to evaluate yet
+      if (now.getTime() < evalAt.getTime())
+        continue
 
       try {
         console.log(`⚔️ Settling room ${roomId} (evalAt: ${room.evalAt})`)
 
-        // Main logic
         await settleRoom(roomId)
 
         settledRooms.push(roomId)
@@ -79,7 +84,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    // Save updated Duel state
+    // Save updates
     await saveDuels(duels)
 
     console.log(`🏁 Arena settlement finished → ${settledRooms.length} rooms settled`)
