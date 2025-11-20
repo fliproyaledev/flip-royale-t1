@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 1,
   "buildCommand": "npm run build",
   "devCommand": "npm run dev",
   "installCommand": "npm install",
@@ -7,5 +7,15 @@
   "regions": ["iad1"],
   "env": {
     "PRICE_POLL_INTERVAL_MS": "60000"
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/settle-rounds",
+      "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/settle-arenas",
+      "schedule": "0 0 * * *"
+    }
+  ]
 }
