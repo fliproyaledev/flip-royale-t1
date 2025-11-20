@@ -8,6 +8,9 @@ import {
 
 import { getPriceForToken } from "../../../lib/price";
 
+// Vercel Environment Variables'dan gizli anahtarı alıyoruz
+const CRON_SECRET = process.env.CRON_SECRET;
+
 // ---------------- Utility ----------------
 
 function nerfFactor(dup: number): number {
@@ -64,16 +67,25 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+  // Sadece GET isteklerine izin ver
   if (req.method !== "GET")
     return res.status(405).json({ ok: false, error: "GET only" });
 
-  // GÜVENLİK KONTROLÜ: Sadece Vercel Cron tarafından çağrıldığından emin ol
-  if (!req.headers["x-vercel-cron"]) {
-    // Manuel testlerde 401 hatası almanız normaldir ve bu güvenliğin çalıştığını gösterir.
-    return res
-      .status(401)
-      .json({ ok: false, error: "Unauthorized (Not Vercel Cron)" });
+  // ---------------------------------------------------------
+  // GÜVENLİK KONTROLÜ (Harici Cron Servisi İçin)
+  // URL'den gelen 'key' parametresini kontrol eder.
+  // Örnek kullanım: https://site.com/api/cron/settle-rounds?key=GIZLI_SIFRE
+  // ---------------------------------------------------------
+  const { key } = req.query;
+
+  if (!CRON_SECRET) {
+    return res.status(500).json({ ok: false, error: "Server Error: CRON_SECRET not set in env" });
   }
+
+  if (key !== CRON_SECRET) {
+    return res.status(401).json({ ok: false, error: "Unauthorized: Invalid Secret Key" });
+  }
+  // ---------------------------------------------------------
 
   try {
     const today = utcDayKey();
