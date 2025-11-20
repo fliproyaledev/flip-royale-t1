@@ -1,17 +1,15 @@
-export const config = {
-  runtime: 'nodejs',
-};
-import type { NextApiRequest, NextApiResponse } from 'next'
-import { 
-  loadUsers, 
-  saveUsers, 
-  creditGamePoints, 
-  type RoundPick 
-} from '../../lib/users'
+import type { NextApiRequest, NextApiResponse } from "next";
+import {
+  loadUsers,
+  saveUsers,
+  creditGamePoints,
+  type RoundPick,
+} from "../../../lib/users";
 
-import { getPriceForToken } from '../../lib/price'
+import { getPriceForToken } from "../../../lib/price";
 
-// --- Utility: Duplicate Pick Nerf ---
+// ---------------- Utility ----------------
+
 function nerfFactor(dup: number): number {
   if (dup <= 1) return 1;
   if (dup === 2) return 0.75;
@@ -21,13 +19,13 @@ function nerfFactor(dup: number): number {
 }
 
 function clamp(v: number, min: number, max: number) {
-  return Math.min(Math.max(v, min), max)
+  return Math.min(Math.max(v, min), max);
 }
 
 function calcPoints(
   p0: number,
   pClose: number,
-  dir: 'UP' | 'DOWN',
+  dir: "UP" | "DOWN",
   dup: number,
   boostLevel: 0 | 50 | 100,
   boostActive: boolean
@@ -35,7 +33,8 @@ function calcPoints(
   if (!isFinite(p0) || !isFinite(pClose) || p0 <= 0 || pClose <= 0) return 0;
 
   const pct = ((pClose - p0) / p0) * 100;
-  const signed = dir === 'UP' ? pct : -pct;
+  const signed = dir === "UP" ? pct : -pct;
+
   let pts = signed * 100;
 
   const nerf = nerfFactor(dup);
@@ -53,33 +52,42 @@ function calcPoints(
 
 function utcDayKey() {
   const d = new Date();
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(
+    2,
+    "0"
+  )}-${String(d.getUTCDate()).padStart(2, "0")}`;
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+// ---------------- Handler ----------------
 
-  // ☑ Vercel Cron sadece GET gönderir
-  if (req.method !== 'GET')
-    return res.status(405).json({ ok: false, error: 'GET only' })
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  if (req.method !== "GET")
+    return res.status(405).json({ ok: false, error: "GET only" });
 
-  // ☑ Yeni doğrulama: sadece bu header yeterli
-  if (!req.headers['x-vercel-cron']) {
-    return res.status(401).json({ ok: false, error: 'Unauthorized (Not Cron)' })
+  // Vercel Cron doğrulaması
+  if (!req.headers["x-vercel-cron"]) {
+    return res
+      .status(401)
+      .json({ ok: false, error: "Unauthorized (Not Vercel Cron)" });
   }
 
   try {
     const today = utcDayKey();
-
     const users = await loadUsers();
+
     const settledUsers: string[] = [];
     const errors: any[] = [];
 
-    for (const id in users) {
-      const user = users[id];
-      if (!user || !user.id) continue;
+    for (const uid in users) {
+      const user = users[uid];
+      if (!user) continue;
 
       if (!Array.isArray(user.activeRound)) user.activeRound = [];
-      if (!Array.isArray(user.nextRound)) user.nextRound = Array(5).fill(null);
+      if (!Array.isArray(user.nextRound))
+        user.nextRound = Array(5).fill(null);
 
       if (user.lastSettledDay === today) continue;
 
@@ -89,7 +97,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         for (const pick of user.activeRound) {
           if (!pick || !pick.tokenId) continue;
 
-          if (pick.locked && typeof pick.pointsLocked === 'number') {
+          if (pick.locked && typeof pick.pointsLocked === "number") {
             total += pick.pointsLocked;
             continue;
           }
@@ -109,7 +117,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
 
         if (total !== 0) {
-          creditGamePoints(user, total, `flip-round-${today}`, today);
+          creditGamePoints(
+            user,
+            total,
+            `flip-round-${today}`,
+            today
+          );
         }
 
         const next = (user.nextRound || []).filter(Boolean) as RoundPick[];
@@ -126,9 +139,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         user.updatedAt = new Date().toISOString();
 
         settledUsers.push(user.id);
-
-      } catch (e: any) {
-        errors.push({ userId: id, error: e.message });
+      } catch (err: any) {
+        errors.push({ uid, error: err.message });
       }
     }
 
@@ -139,16 +151,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       date: today,
       settledCount: settledUsers.length,
       settledUsers,
-      errors
+      errors,
     });
-
   } catch (err: any) {
     return res.status(500).json({ ok: false, error: err.message });
   }
 }
-
-
-
-
-
-
