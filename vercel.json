@@ -11,14 +11,15 @@
   "crons": [
     {
       "path": "/api/cron/settle-rounds",
-      "schedule": "14 49 * * *"
+      "schedule": "52 14 * * *"
     },
     {
       "path": "/api/cron/settle-arenas",
-      "schedule": "14 49 * * *"
+      "schedule": "52 14 * * *"
     }
   ]
 }
+
 
 
 
