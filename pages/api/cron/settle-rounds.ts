@@ -1,161 +1,111 @@
 import crypto from 'crypto'
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { 
-  loadUsers, 
-  saveUsers, 
-  creditGamePoints, 
-  type RoundPick 
-} from '../../../lib/users'
-import { getPriceForToken } from '../../../lib/price'
+import { loadDuels, saveDuels, settleRoom } from '../../../lib/duels'
 
-// --- Verify HMAC signature manually ---
+function utcDayKey(d: Date = new Date()): string {
+  const y = d.getUTCFullYear()
+  const m = d.getUTCMonth()
+  const day = d.getUTCDate()
+  return `${y}-${String(m + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+// --- Manual Vercel HMAC validation ---
 function verifyVercelSignature(signature: string | undefined, secret: string): boolean {
   if (!signature) return false
 
   const expected = crypto
     .createHmac('sha256', secret)
-    .update('')
+    .update('') // empty payload
     .digest('hex')
 
   return signature === expected
 }
 
-// --- Utility: Duplicate Pick Nerf ---
-function nerfFactor(dup: number): number {
-  if (dup <= 1) return 1
-  if (dup === 2) return 0.75
-  if (dup === 3) return 0.5
-  if (dup === 4) return 0.25
-  return 0
-}
-
-function clamp(v: number, min: number, max: number) {
-  return Math.min(Math.max(v, min), max)
-}
-
-function calcPoints(
-  p0: number,
-  pClose: number,
-  dir: 'UP' | 'DOWN',
-  dup: number,
-  boostLevel: 0 | 50 | 100,
-  boostActive: boolean
-) {
-  if (!isFinite(p0) || !isFinite(pClose) || p0 <= 0 || pClose <= 0) return 0
-
-  const pct = ((pClose - p0) / p0) * 100
-  const signed = dir === 'UP' ? pct : -pct
-  let pts = signed * 100
-
-  const nerf = nerfFactor(dup)
-  const loss = 2 - nerf
-
-  pts = pts >= 0 ? pts * nerf : pts * loss
-  pts = clamp(pts, -2500, 2500)
-
-  if (boostActive && boostLevel && pts > 0) {
-    pts *= boostLevel === 100 ? 2 : boostLevel === 50 ? 1.5 : 1
-  }
-
-  return Math.round(pts)
-}
-
-function utcDayKey() {
-  const d = new Date()
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`
-}
-
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
 
-  if (req.method !== 'GET')
-    return res.status(405).json({ ok: false, error: 'GET only' })
+  // ✔ Vercel Cron always sends GET
+  if (req.method !== 'GET') {
+    return res.status(405).json({ ok: false, error: 'Only GET allowed' })
+  }
 
-  // --- Manual Vercel Signature Validation ---
+  // ✔ Validate HMAC signature
   const signature = req.headers['x-vercel-signature'] as string
   const secret = process.env.CRON_SECRET!
 
-  const isValid = verifyVercelSignature(signature, secret)
+  const valid = verifyVercelSignature(signature, secret)
 
-  if (!isValid) {
-    return res.status(401).json({ ok: false, error: 'Unauthorized signature' })
+  if (!valid) {
+    return res.status(401).json({ ok: false, error: 'Unauthorized (Bad Signature)' })
   }
 
   try {
     const today = utcDayKey()
+    const now = new Date()
 
-    const users = await loadUsers()
-    const settledUsers: string[] = []
-    const errors: any[] = []
+    console.log(`🔄 [CRON-ARENAS] Starting arena settlement for ${today}`)
 
-    for (const id in users) {
-      const user = users[id]
-      if (!user || !user.id) continue
+    let duels = await loadDuels()
 
-      if (!Array.isArray(user.activeRound)) user.activeRound = []
-      if (!Array.isArray(user.nextRound)) user.nextRound = Array(5).fill(null)
+    const settledRooms: string[] = []
+    const errors: Array<{ roomId: string; error: string }> = []
 
-      if (user.lastSettledDay === today) continue
+    for (const roomId in duels) {
+      const room = duels[roomId]
+
+      // skip invalid rooms
+      if (!room || typeof room !== 'object') continue
+
+      // skip finished rooms
+      if (room.status === 'settled' || room.status === 'cancelled') continue
+
+      // ensure evalAt exists
+      if (!room.evalAt) {
+        console.warn(`⚠️ Room ${roomId} missing evalAt → cancelled`)
+        room.status = 'cancelled'
+        continue
+      }
+
+      const evalAt = new Date(room.evalAt)
+
+      // Not ready
+      if (now.getTime() < evalAt.getTime()) continue
 
       try {
-        let total = 0
+        console.log(`⚔️ Settling room ${roomId} (evalAt: ${room.evalAt})`)
 
-        for (const pick of user.activeRound) {
-          if (!pick || !pick.tokenId) continue
+        await settleRoom(roomId)
 
-          if (pick.locked && typeof pick.pointsLocked === 'number') {
-            total += pick.pointsLocked
-            continue
-          }
+        settledRooms.push(roomId)
 
-          const price = await getPriceForToken(pick.tokenId)
-
-          const pts = calcPoints(
-            price.p0,
-            price.pClose,
-            pick.dir,
-            pick.duplicateIndex,
-            0,
-            false
-          )
-
-          total += pts
-        }
-
-        if (total !== 0) {
-          creditGamePoints(user, total, `flip-round-${today}`, today)
-        }
-
-        const next = (user.nextRound || []).filter(Boolean) as RoundPick[]
-
-        if (next.length > 0) {
-          user.activeRound = next
-          user.nextRound = Array(5).fill(null)
-        } else {
-          user.activeRound = []
-        }
-
-        user.currentRound = (user.currentRound || 1) + 1
-        user.lastSettledDay = today
-        user.updatedAt = new Date().toISOString()
-
-        settledUsers.push(user.id)
+        console.log(`✅ Room settled: ${roomId}`)
 
       } catch (e: any) {
-        errors.push({ userId: id, error: e.message })
+        const msg = e?.message || 'Unknown error'
+
+        if (msg.includes('Evaluation time not reached')) {
+          console.log(`⏭️ Room ${roomId} not ready: ${msg}`)
+          continue
+        }
+
+        console.error(`❌ Failed to settle room ${roomId}:`, msg)
+        errors.push({ roomId, error: msg })
       }
     }
 
-    await saveUsers(users)
+    await saveDuels(duels)
+
+    console.log(`🏁 Arena settlement finished → ${settledRooms.length} rooms settled`)
 
     return res.status(200).json({
       ok: true,
       date: today,
-      settledCount: settledUsers.length,
-      settledUsers,
+      settledCount: settledRooms.length,
+      settledRooms,
       errors
     })
 
-  } catch (err: any) {
-    return res.status(500).json({ ok: false, error: err.message })
+  } catch (e: any) {
+    console.error('❌ [CRON-ARENAS] Fatal error:', e)
+    return res.status(500).json({ ok: false, error: e?.message || 'Internal server error' })
   }
 }
