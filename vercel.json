@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "buildCommand": "npm run build",
   "devCommand": "npm run dev",
   "installCommand": "npm install",
@@ -10,14 +10,12 @@
   },
   "crons": [
     {
-    "path": "/api/cron/settle-arenas",
+      "path": "/api/settle-rounds",
       "schedule": "0 0 * * *"
     },
     {
-    "path": "/api/cron/settle-rounds",
+      "path": "/api/settle-arenas",
       "schedule": "0 0 * * *"
     }
   ]
 }
-
-
