@@ -5,6 +5,9 @@ import {
   settleRoom,
 } from "../../../lib/duels";
 
+// CRON GÜVENLİK ANAHTARI
+const CRON_SECRET = process.env.CRON_SECRET;
+
 function utcDayKey() {
   const d = new Date();
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(
@@ -20,10 +23,19 @@ export default async function handler(
   if (req.method !== "GET")
     return res.status(405).json({ ok: false, error: "GET only" });
 
-  if (!req.headers["x-vercel-cron"]) {
+  // GÜVENLİK KONTROLÜ (Yeni ve Güvenli Yöntem)
+  const vercelCronHeader = req.headers["x-vercel-cron"];
+
+  if (!CRON_SECRET) {
+    return res
+      .status(500) // 500 kodu, sunucu hatası (konfigürasyon eksik)
+      .json({ ok: false, error: "Configuration Error: CRON_SECRET is missing." });
+  }
+  
+  if (vercelCronHeader !== CRON_SECRET) {
     return res
       .status(401)
-      .json({ ok: false, error: "Unauthorized (Not Vercel Cron)" });
+      .json({ ok: false, error: "Unauthorized: Invalid CRON_SECRET or missing header." });
   }
 
   try {
@@ -67,5 +79,3 @@ export default async function handler(
     return res.status(500).json({ ok: false, error: err.message });
   }
 }
-
-
