@@ -3,7 +3,7 @@ import {
   loadDuels,
   saveDuels,
   settleRoom,
-} from "../../lib/duels";
+} from "../../../lib/duels";
 
 function utcDayKey() {
   const d = new Date();
@@ -67,4 +67,5 @@ export default async function handler(
     return res.status(500).json({ ok: false, error: err.message });
   }
 }
+
 
