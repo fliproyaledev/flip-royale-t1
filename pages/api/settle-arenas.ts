@@ -3,7 +3,7 @@ export const config = {
 };
 import crypto from 'crypto'
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { loadDuels, saveDuels, settleRoom } from '../../lib/users'
+import { loadDuels, saveDuels, settleRoom } from '../../../lib/duels'
 
 function utcDayKey(d: Date = new Date()): string {
   const y = d.getUTCFullYear()
@@ -112,5 +112,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(500).json({ ok: false, error: e?.message || 'Internal server error' })
   }
 }
+
 
 
