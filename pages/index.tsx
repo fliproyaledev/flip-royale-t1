@@ -107,8 +107,6 @@ function calcPoints(p0:number, pNow:number, dir:'UP'|'DOWN', dup:number, boostLe
 export default function Home(){
   const { theme } = useTheme()
   const [now, setNow] = useState(Date.now())
-  // --- ZAMAN KONTROLÜ ---
-  const [now, setNow] = useState(Date.now())
   // 🛑 TEST MODU: Burayı 'true' yapınca ekran sürekli Finalizing görünür.
   // Testin bitip her şeyin çalıştığını görünce burayı silip alttaki gerçek kodu açmalısın!
   const isFinalizingWindow = true;
