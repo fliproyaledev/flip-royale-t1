@@ -2,8 +2,13 @@
 
 import { TOKEN_MAP, buildDexscreenerViewUrl, parseDexscreenerLink } from './tokens'
 import type { Token } from './tokens'
-import type { DexscreenerPairRef, DexscreenerQuote } from './dexscreener'
-import { getDexPairQuote, buildPairViewUrl, findDexPairForToken } from './dexscreener'
+import type { DexscreenerQuote } from './dexscreener'
+import {
+  getDexPairQuote,
+  getDexPairQuotesBulk,
+  buildPairViewUrl,
+  findDexPairForToken
+} from './dexscreener'
 import { getGeckoPoolQuote } from './gecko'
 
 export type CachedPrice = {
@@ -25,6 +30,10 @@ type PairSpec = {
   symbol: string
   network: string
   pair: string
+}
+
+function toKey(network: string, pair: string) {
+  return `${network.toLowerCase()}:${pair.toLowerCase()}`
 }
 
 function deriveBaseline(currentPrice: number, changePct?: number): number {
@@ -101,17 +110,35 @@ class PriceOrchestrator {
   }
 
   private async poll(): Promise<void> {
-    await Promise.allSettled(this.pairs.map((spec) => this.pollOne(spec)))
+    let bulk = new Map<string, DexscreenerQuote | null>()
+
+    try {
+      bulk = await getDexPairQuotesBulk(
+        this.pairs.map((p) => ({ network: p.network, pair: p.pair }))
+      )
+    } catch {
+      // Bulk araması fail ederse bireysel fallback uygulanacak
+    }
+
+    await Promise.allSettled(this.pairs.map((spec) => this.pollOne(spec, bulk)))
   }
 
-  private async pollOne(spec: PairSpec): Promise<void> {
+  private async pollOne(
+    spec: PairSpec,
+    bulk?: Map<string, DexscreenerQuote | null>
+  ): Promise<void> {
     const { tokenId, symbol } = spec
 
     let network = spec.network
     let pair = spec.pair
 
     // Dexscreener (Strict)
-    let dex: DexscreenerQuote | null = await getDexPairQuote(network, pair)
+    const bulkKey = toKey(network, pair)
+    let dex: DexscreenerQuote | null = bulk?.get(bulkKey) ?? null
+
+    if (dex === undefined) {
+      dex = await getDexPairQuote(network, pair)
+    }
 
     // Explicit pair başarısızsa token araması yap
     if (!dex) {

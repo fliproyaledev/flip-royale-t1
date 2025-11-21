@@ -93,6 +93,61 @@ export async function getDexPairQuote(network: string, pair: string) {
   return enqueue(network, pair)
 }
 
+/**
+ * Birden fazla pair'ı tek API çağrısı ile getirir (network bazlı).
+ *
+ * Dönen Map, `network:pair` key'i ile sonuçları saklar.
+ */
+export async function getDexPairQuotesBulk(
+  refs: DexscreenerPairRef[]
+): Promise<Map<string, DexscreenerQuote | null>> {
+  const results = new Map<string, DexscreenerQuote | null>()
+
+  // Önden cache'e bak
+  const toFetchByNetwork = new Map<string, Set<string>>()
+
+  const now = Date.now()
+
+  for (const ref of refs) {
+    if (!ref?.network || !ref?.pair) continue
+
+    const net = ref.network.toLowerCase()
+    const pr = ref.pair.toLowerCase()
+    const key = toKey(net, pr)
+
+    const cached = pairCache.get(key)
+    if (cached && cached.expiresAt > now) {
+      results.set(key, cached.value)
+      continue
+    }
+
+    const set = toFetchByNetwork.get(net) || new Set<string>()
+    set.add(pr)
+    toFetchByNetwork.set(net, set)
+  }
+
+  // Network bazında chunk'larla çek
+  for (const [network, pairs] of toFetchByNetwork.entries()) {
+    const list = Array.from(pairs)
+
+    for (let i = 0; i < list.length; i += CHUNK_SIZE) {
+      const chunk = list.slice(i, i + CHUNK_SIZE)
+      const chunkResults = await fetchChunkDirect(network, chunk)
+
+      for (const [pair, quote] of chunkResults.entries()) {
+        const key = toKey(network, pair)
+        results.set(key, quote)
+        pairCache.set(key, {
+          value: quote,
+          expiresAt: now + (quote ? CACHE_TTL_MS : NULL_CACHE_TTL_MS)
+        })
+      }
+    }
+  }
+
+  return results
+}
+
 export async function getDexPairQuoteStrict(network: string, pair: string) {
   if (!network || !pair) return null
 
@@ -406,6 +461,88 @@ async function fetchChunk(
   for (const pr of chunk) {
     rejectPair(pr.toLowerCase(), lastError, resolvers)
   }
+}
+
+async function fetchChunkDirect(
+  network: string,
+  chunk: string[]
+): Promise<Map<string, DexscreenerQuote | null>> {
+  const results = new Map<string, DexscreenerQuote | null>()
+  const url = `https://api.dexscreener.com/latest/dex/pairs/${network}/${chunk.join(
+    ','
+  )}`
+
+  let lastError: any = null
+
+  for (let attempt = 0; attempt < MAX_RETRY; attempt++) {
+    try {
+      const r = await fetch(url, { headers: EXTERNAL_HEADERS })
+
+      if (r.status === 429) {
+        await delay(250 * Math.pow(2, attempt))
+        continue
+      }
+
+      if (!r.ok) {
+        lastError = new Error(`Dexscreener responded ${r.status}`)
+        break
+      }
+
+      const j = await r.json()
+      const pairs = Array.isArray(j?.pairs) ? j.pairs : []
+
+      const map = new Map<string, DexscreenerQuote>()
+
+      for (const item of pairs) {
+        const address = String(item?.pairAddress || '').toLowerCase()
+        const price = Number(item?.priceUsd)
+
+        if (!address || !isFinite(price) || price <= 0) continue
+
+        const change = Number(
+          item?.priceChange?.h24 ??
+            item?.priceChange?.h6 ??
+            item?.priceChange?.h1 ??
+            item?.priceChange?.m5
+        )
+
+        const liquidity = Number(item?.liquidity?.usd ?? 0)
+
+        const fdvRaw = item?.fdv
+        const fdv =
+          typeof fdvRaw === 'number'
+            ? fdvRaw
+            : Number(fdvRaw?.usd ?? 0)
+
+        map.set(address, {
+          network,
+          pair: address,
+          priceUsd: price,
+          changePct: isFinite(change) ? change : undefined,
+          liquidityUsd: isFinite(liquidity) ? liquidity : undefined,
+          fdv: isFinite(fdv) && fdv > 0 ? fdv : undefined,
+          fetchedAt: Date.now(),
+          raw: item
+        })
+      }
+
+      for (const p of chunk) {
+        const key = p.toLowerCase()
+        results.set(key, map.get(key) ?? null)
+      }
+
+      return results
+    } catch (err) {
+      lastError = err
+      await delay(200)
+    }
+  }
+
+  for (const p of chunk) results.set(p.toLowerCase(), null)
+
+  if (lastError) throw lastError
+
+  return results
 }
 
 // -----------------------------------------------------
