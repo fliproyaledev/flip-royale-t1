@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { SyntheticEvent } from 'react'
-import { jsonTokens, buildDexscreenerViewUrl } from '../lib/tokens'
+import { jsonTokens } from '../lib/tokens' // buildDexscreenerViewUrl kaldırdık, manuel yapacağız
 import ThemeToggle from '../components/ThemeToggle'
 
 type PriceRow = {
@@ -57,15 +57,11 @@ export default function PricesPage() {
     try {
       const result = await Promise.all(
         jsonTokens.map(async token => {
-          // Token listesindeki hardcoded URL/Pair'den view URL'ini oluştur (KIRILMAZ LİNK)
-          const hardcodedView = buildDexscreenerViewUrl(token.dexscreenerUrl, token.dexscreenerNetwork, token.dexscreenerPair) || token.dexscreenerUrl
-          
           try {
             const resp = await fetch(`/api/price?token=${encodeURIComponent(token.id)}`)
             if (!resp.ok) throw new Error(`Request failed with ${resp.status}`)
             const data = await resp.json()
             
-            // Fiyatların USD Çarpımından sonra geldiğini varsayıyoruz (Orchestrator'da yaptık)
             const price = Number(data?.pLive ?? NaN)
             const baseline = Number(data?.p0 ?? data?.pLive ?? NaN)
             
@@ -75,6 +71,22 @@ export default function PricesPage() {
                 ? ((price - baseline) / baseline) * 100
                 : null
             
+            // --- LİNK DÜZELTME MANTIĞI ---
+            // API'den gelen network ve pair varsa onu kullan, yoksa token listesindekini kullan
+            const finalNetwork = (data?.dexNetwork || token.dexscreenerNetwork || 'base').toLowerCase();
+            const finalPair = (data?.dexPair || token.dexscreenerPair || '').toLowerCase();
+            
+            // Doğru link formatı: https://dexscreener.com/base/0x...
+            // Asla 'api.dexscreener' veya '/pools/' içermemeli.
+            let correctViewUrl = '';
+            if (finalPair) {
+                correctViewUrl = `https://dexscreener.com/${finalNetwork}/${finalPair}`;
+            } else {
+                // Pair yoksa sembol ile aramaya yönlendir
+                correctViewUrl = `https://dexscreener.com/search?q=${token.symbol}`;
+            }
+            // -----------------------------
+
             return {
               tokenId: token.id,
               symbol: token.symbol,
@@ -87,16 +99,21 @@ export default function PricesPage() {
               source: data?.source,
               updatedAt: data?.ts,
               
-              // KESİNLİK KONTROLÜ: View URL'i hardcoded linke gitmeli
-              dexscreenerUrl: hardcodedView, 
-              
-              // Orchestrator'dan gelen pair/network verisini kullanıyoruz (doğru pair olmalı)
-              dexNetwork: data?.dexNetwork, 
-              dexPair: data?.dexPair,
+              // DÜZELTİLMİŞ LİNKİ BURAYA ATIYORUZ
+              dexscreenerUrl: correctViewUrl, 
+              dexNetwork: finalNetwork, 
+              dexPair: finalPair,
               
               error: undefined
             } as PriceRow
           } catch (err: any) {
+            // Hata durumunda bile token listesindeki bilgilerle düzgün link oluştur
+            const fallbackNetwork = (token.dexscreenerNetwork || 'base').toLowerCase();
+            const fallbackPair = (token.dexscreenerPair || '').toLowerCase();
+            const fallbackUrl = fallbackPair 
+                ? `https://dexscreener.com/${fallbackNetwork}/${fallbackPair}`
+                : `https://dexscreener.com/search?q=${token.symbol}`;
+
             return {
               tokenId: token.id,
               symbol: token.symbol,
@@ -107,10 +124,9 @@ export default function PricesPage() {
               changePct: null,
               source: undefined,
               updatedAt: undefined,
-              // API hata verse bile hardcoded view URL'ini göster
-              dexscreenerUrl: hardcodedView, 
-              dexNetwork: token.dexscreenerNetwork,
-              dexPair: token.dexscreenerPair,
+              dexscreenerUrl: fallbackUrl, 
+              dexNetwork: fallbackNetwork,
+              dexPair: fallbackPair,
               error: err?.message || 'Unable to fetch price'
             } as PriceRow
           }
