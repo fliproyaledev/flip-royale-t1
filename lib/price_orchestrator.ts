@@ -6,8 +6,9 @@ import type { DexscreenerPairRef, DexscreenerQuote } from './dexscreener'
 import { getDexPairQuoteStrict } from './dexscreener'
 import { getGeckoPoolQuote } from './gecko'
 
-// ⚠️ YENİ SABİT: Lütfen Vercel'deki Environment Variable'da bu tokenin ID'sini tanımlayın
-const VIRTUAL_TOKEN_ID = process.env.VIRTUAL_TOKEN_ID || 'MOCK_USDC_TOKEN_ID';
+// Environment Variable'dan ID'yi al ve güvenli hale getir (küçük harf)
+const RAW_VIRTUAL_ID = process.env.VIRTUAL_TOKEN_ID || '';
+const VIRTUAL_TOKEN_ID = RAW_VIRTUAL_ID.toLowerCase().trim();
 
 export type CachedPrice = {
   tokenId: string
@@ -31,25 +32,23 @@ type PairSpec = {
 }
 
 function deriveBaseline(currentPrice: number, changePct?: number): number {
-  if (!isFinite(changePct) || changePct <= -100 || changePct === 0) {
+  if (!isFinite(changePct) || changePct === undefined || changePct <= -100 || changePct === 0) {
     return currentPrice
   }
   const baseline = currentPrice / (1 + changePct / 100)
   return baseline > 0 ? baseline : currentPrice
 }
 
-// YENİ FONKSİYON: Doğru Dexscreener Görüntüleme URL'i oluşturur
+// View URL oluşturucu (Public)
 export function buildPublicViewUrl(
   ref: DexscreenerPairRef | null | undefined
 ): string | undefined {
   if (!ref) return undefined
-  // API URL değil, GÖRÜNTÜLEME URL'i (API endpoint hatasını giderir)
   return `https://dexscreener.com/${ref.network.toLowerCase()}/${ref.pair.toLowerCase()}`
 }
 
 function getExplicitPair(token: Token): PairSpec | null {
   const network = (token.dexscreenerNetwork || 'base').toLowerCase()
-
   let pair = (token.dexscreenerPair || '').toLowerCase()
 
   if (!pair) {
@@ -75,7 +74,9 @@ class PriceOrchestrator {
   private cache = new Map<string, CachedPrice>()
   private pairs: PairSpec[] = []
   private intervalMs = 60_000
-  private virtualPriceUsd: number = 1.0 // VIRTUAL tokenin USD fiyatı
+  
+  // Virtual Token Fiyatı (Başlangıçta 0, böylece yüklenmediğini anlarız)
+  private virtualPriceUsd: number = 0 
 
   start() {
     if (this.started) return
@@ -90,12 +91,14 @@ class PriceOrchestrator {
       .map(getExplicitPair)
       .filter((x): x is PairSpec => !!x)
 
-    // Warm-up
-    this.poll().catch(() => {})
+    console.log(`[PriceOrchestrator] Started. Virtual ID: ${VIRTUAL_TOKEN_ID || 'NOT SET'}`)
 
-    // Continuous polling
+    // İlk çalıştırma
+    this.poll().catch((e) => console.error('[PriceOrchestrator] Initial poll failed:', e))
+
+    // Periyodik döngü
     this.interval = setInterval(() => {
-      this.poll().catch(() => {})
+      this.poll().catch((e) => console.error('[PriceOrchestrator] Poll failed:', e))
     }, this.intervalMs)
   }
 
@@ -106,18 +109,23 @@ class PriceOrchestrator {
   }
 
   getOne(tokenId: string): CachedPrice | null {
-    // Fiyatı çekerken Virtual fiyatıyla çarparak gerçek USD değerini döndürür.
     const cached = this.cache.get(tokenId)
     if (!cached) return null
     
-    // Eğer token Virtual ise veya fiyat 0 ise, direkt cached değeri döndür
-    if (cached.tokenId === VIRTUAL_TOKEN_ID || this.virtualPriceUsd === 1.0) {
+    // 1. Eğer bu token VIRTUAL ise, direkt kendi fiyatını dön (Çarpma yapma!)
+    // 2. Eğer VIRTUAL ID ayarlanmamışsa, direkt fiyatı dön (Normal mod)
+    // 3. Eğer Virtual fiyatı henüz çekilmemişse (0 ise), ham fiyatı dön (Hata önlemi)
+    if (
+        !VIRTUAL_TOKEN_ID || 
+        tokenId.toLowerCase() === VIRTUAL_TOKEN_ID || 
+        this.virtualPriceUsd === 0
+    ) {
         return cached;
     }
 
+    // Diğer tüm tokenler için: HAVUZ FİYATI * VIRTUAL USD FİYATI
     return {
         ...cached,
-        // ÇAPRAZ KUR HESAPLAMASI
         pLive: cached.pLive * this.virtualPriceUsd,
         p0: cached.p0 * this.virtualPriceUsd,
         fdv: cached.fdv ? cached.fdv * this.virtualPriceUsd : undefined,
@@ -129,39 +137,57 @@ class PriceOrchestrator {
   }
 
   private async poll(): Promise<void> {
-    // Önce Virtual tokenin fiyatını çek
-    if (VIRTUAL_TOKEN_ID && VIRTUAL_TOKEN_ID !== 'MOCK_USDC_TOKEN_ID') {
-        const virtualToken = TOKEN_MAP[VIRTUAL_TOKEN_ID];
+    // ADIM 1: Önce Virtual Token fiyatını çek ve güncelle
+    if (VIRTUAL_TOKEN_ID) {
+        const virtualToken = TOKEN_MAP[Object.keys(TOKEN_MAP).find(k => k.toLowerCase() === VIRTUAL_TOKEN_ID) || ''];
+        
         if (virtualToken) {
-            const virtualSpec = getExplicitPair(virtualToken);
-            if (virtualSpec) {
-                await this.pollOne(virtualSpec, true); // Virtual tokeni özel olarak çek
-                const virtualCached = this.cache.get(VIRTUAL_TOKEN_ID);
-                this.virtualPriceUsd = virtualCached?.pLive ?? 1.0;
+            const spec = getExplicitPair(virtualToken);
+            if (spec) {
+                await this.pollOne(spec); // Cache'e kaydeder
+                const vPrice = this.cache.get(virtualToken.id);
+                if (vPrice && vPrice.pLive > 0) {
+                    this.virtualPriceUsd = vPrice.pLive;
+                    console.log(`[PriceOrchestrator] Virtual Price Updated: $${this.virtualPriceUsd}`);
+                } else {
+                    console.warn(`[PriceOrchestrator] Failed to fetch Virtual Price! Keeping old value: $${this.virtualPriceUsd}`);
+                }
             }
+        } else {
+            console.warn(`[PriceOrchestrator] VIRTUAL_TOKEN_ID defined (${VIRTUAL_TOKEN_ID}) but not found in TOKEN_MAP`);
         }
     }
-    
-    // Diğer tokenleri çek
+
+    // ADIM 2: Diğer tüm tokenleri çek
+    // (Not: Virtual token zaten yukarıda çekildi ama listede varsa tekrar üstünden geçmesinde sakınca yok, cache'den gelir)
     for (const spec of this.pairs) {
-      if (spec.tokenId !== VIRTUAL_TOKEN_ID) {
+        // Virtual tokeni tekrar çekip yormaya gerek yok
+        if (spec.tokenId.toLowerCase() === VIRTUAL_TOKEN_ID) continue;
         await this.pollOne(spec)
-      }
     }
   }
 
-  private async pollOne(spec: PairSpec, isVirtual = false): Promise<void> {
+  private async pollOne(spec: PairSpec): Promise<void> {
     const { tokenId, symbol, network, pair } = spec
 
     // Dexscreener (Strict)
     const dex: DexscreenerQuote | null = await getDexPairQuoteStrict(network, pair)
+    
     if (dex) {
       const baseline = deriveBaseline(dex.priceUsd, dex.changePct)
+      
       const entry: CachedPrice = {
-        tokenId, symbol, pLive: dex.priceUsd, p0: baseline, changePct: dex.changePct,
-        fdv: dex.fdv, ts: new Date(dex.fetchedAt).toISOString(), source: 'dexscreener',
-        dexNetwork: network, dexPair: pair, 
-        dexUrl: buildPublicViewUrl({ network, pair }) // ARTIK DOĞRU VIEW URL'İ
+        tokenId,
+        symbol,
+        pLive: dex.priceUsd,
+        p0: baseline,
+        changePct: dex.changePct,
+        fdv: dex.fdv,
+        ts: new Date(dex.fetchedAt).toISOString(),
+        source: 'dexscreener',
+        dexNetwork: network,
+        dexPair: pair,
+        dexUrl: buildPublicViewUrl({ network, pair })
       }
       this.cache.set(tokenId, entry)
       return
@@ -172,16 +198,23 @@ class PriceOrchestrator {
     if (gecko) {
       const baseline = deriveBaseline(gecko.priceUsd, gecko.changePct)
       const entry: CachedPrice = {
-        tokenId, symbol, pLive: gecko.priceUsd, p0: baseline, changePct: gecko.changePct,
-        ts: new Date(gecko.fetchedAt).toISOString(), source: 'gecko',
-        dexNetwork: network, dexPair: pair,
-        dexUrl: buildPublicViewUrl({ network, pair }) // ARTIK DOĞRU VIEW URL'İ
+        tokenId,
+        symbol,
+        pLive: gecko.priceUsd,
+        p0: baseline,
+        changePct: gecko.changePct,
+        ts: new Date(gecko.fetchedAt).toISOString(),
+        source: 'gecko',
+        dexNetwork: network,
+        dexPair: pair,
+        dexUrl: buildPublicViewUrl({ network, pair })
       }
       this.cache.set(tokenId, entry)
       return
     }
-
-    // If both fail → keep last cached value
+    
+    // Hata durumunda log
+    console.warn(`[PriceOrchestrator] Failed to fetch price for ${symbol} (${network}:${pair})`);
   }
 }
 
