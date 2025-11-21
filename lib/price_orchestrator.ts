@@ -1,12 +1,12 @@
 // lib/price_orchestrator.ts
 
-import { TOKEN_MAP, buildDexscreenerViewUrl, parseDexscreenerLink } from './tokens'
+import { TOKEN_MAP, parseDexscreenerLink } from './tokens'
 import type { Token } from './tokens'
 import type { DexscreenerPairRef, DexscreenerQuote } from './dexscreener'
 import { getDexPairQuoteStrict } from './dexscreener'
 import { getGeckoPoolQuote } from './gecko'
 
-// Environment Variable'dan ID'yi al ve güvenli hale getir (küçük harf)
+// Environment Variable'dan ID'yi al ve güvenli hale getir
 const RAW_VIRTUAL_ID = process.env.VIRTUAL_TOKEN_ID || '';
 const VIRTUAL_TOKEN_ID = RAW_VIRTUAL_ID.toLowerCase().trim();
 
@@ -39,7 +39,7 @@ function deriveBaseline(currentPrice: number, changePct?: number): number {
   return baseline > 0 ? baseline : currentPrice
 }
 
-// View URL oluşturucu (Public)
+// View URL oluşturucu
 export function buildPublicViewUrl(
   ref: DexscreenerPairRef | null | undefined
 ): string | undefined {
@@ -47,14 +47,26 @@ export function buildPublicViewUrl(
   return `https://dexscreener.com/${ref.network.toLowerCase()}/${ref.pair.toLowerCase()}`
 }
 
+// 🧹 YENİ FONKSİYON: Adresi Temizle
+// Girdi "pools/0x123..." veya "https://..." olsa bile sadece "0x123..." döndürür.
+function sanitizeAddress(input: string): string {
+  if (!input) return '';
+  // Sadece 0x ile başlayan 42 karakterlik hex dizesini bul
+  const match = input.match(/(0x[a-fA-F0-9]{40})/);
+  return match ? match[0].toLowerCase() : '';
+}
+
 function getExplicitPair(token: Token): PairSpec | null {
   const network = (token.dexscreenerNetwork || 'base').toLowerCase()
-  let pair = (token.dexscreenerPair || '').toLowerCase()
+  
+  // JSON'dan gelen veriyi temizle
+  let pair = sanitizeAddress(token.dexscreenerPair || '');
 
+  // Eğer JSON'da pair yoksa URL'den bulmaya çalış
   if (!pair) {
     const parsed = parseDexscreenerLink(token.dexscreenerUrl)
     if (parsed.pair) {
-      pair = parsed.pair.toLowerCase()
+      pair = sanitizeAddress(parsed.pair);
     }
   }
 
@@ -74,8 +86,6 @@ class PriceOrchestrator {
   private cache = new Map<string, CachedPrice>()
   private pairs: PairSpec[] = []
   private intervalMs = 60_000
-  
-  // Virtual Token Fiyatı (Başlangıçta 0, böylece yüklenmediğini anlarız)
   private virtualPriceUsd: number = 0 
 
   start() {
@@ -92,11 +102,10 @@ class PriceOrchestrator {
       .filter((x): x is PairSpec => !!x)
 
     console.log(`[PriceOrchestrator] Started. Virtual ID: ${VIRTUAL_TOKEN_ID || 'NOT SET'}`)
+    console.log(`[PriceOrchestrator] Tracking ${this.pairs.length} pairs.`)
 
-    // İlk çalıştırma
     this.poll().catch((e) => console.error('[PriceOrchestrator] Initial poll failed:', e))
 
-    // Periyodik döngü
     this.interval = setInterval(() => {
       this.poll().catch((e) => console.error('[PriceOrchestrator] Poll failed:', e))
     }, this.intervalMs)
@@ -112,18 +121,10 @@ class PriceOrchestrator {
     const cached = this.cache.get(tokenId)
     if (!cached) return null
     
-    // 1. Eğer bu token VIRTUAL ise, direkt kendi fiyatını dön (Çarpma yapma!)
-    // 2. Eğer VIRTUAL ID ayarlanmamışsa, direkt fiyatı dön (Normal mod)
-    // 3. Eğer Virtual fiyatı henüz çekilmemişse (0 ise), ham fiyatı dön (Hata önlemi)
-    if (
-        !VIRTUAL_TOKEN_ID || 
-        tokenId.toLowerCase() === VIRTUAL_TOKEN_ID || 
-        this.virtualPriceUsd === 0
-    ) {
+    if (!VIRTUAL_TOKEN_ID || tokenId.toLowerCase() === VIRTUAL_TOKEN_ID || this.virtualPriceUsd === 0) {
         return cached;
     }
 
-    // Diğer tüm tokenler için: HAVUZ FİYATI * VIRTUAL USD FİYATI
     return {
         ...cached,
         pLive: cached.pLive * this.virtualPriceUsd,
@@ -137,31 +138,31 @@ class PriceOrchestrator {
   }
 
   private async poll(): Promise<void> {
-    // ADIM 1: Önce Virtual Token fiyatını çek ve güncelle
+    // 1. Virtual Token Fiyatını Çek
     if (VIRTUAL_TOKEN_ID) {
-        const virtualToken = TOKEN_MAP[Object.keys(TOKEN_MAP).find(k => k.toLowerCase() === VIRTUAL_TOKEN_ID) || ''];
+        // Token Map içinde ID'si veya Adresi VIRTUAL_TOKEN_ID ile eşleşeni bul
+        const virtualTokenKey = Object.keys(TOKEN_MAP).find(k => 
+            k.toLowerCase() === VIRTUAL_TOKEN_ID || 
+            TOKEN_MAP[k].id.toLowerCase() === VIRTUAL_TOKEN_ID
+        );
+        
+        const virtualToken = virtualTokenKey ? TOKEN_MAP[virtualTokenKey] : null;
         
         if (virtualToken) {
             const spec = getExplicitPair(virtualToken);
             if (spec) {
-                await this.pollOne(spec); // Cache'e kaydeder
+                await this.pollOne(spec); 
                 const vPrice = this.cache.get(virtualToken.id);
                 if (vPrice && vPrice.pLive > 0) {
                     this.virtualPriceUsd = vPrice.pLive;
-                    console.log(`[PriceOrchestrator] Virtual Price Updated: $${this.virtualPriceUsd}`);
-                } else {
-                    console.warn(`[PriceOrchestrator] Failed to fetch Virtual Price! Keeping old value: $${this.virtualPriceUsd}`);
+                    // console.log(`[PriceOrchestrator] Virtual Price Updated: $${this.virtualPriceUsd}`);
                 }
             }
-        } else {
-            console.warn(`[PriceOrchestrator] VIRTUAL_TOKEN_ID defined (${VIRTUAL_TOKEN_ID}) but not found in TOKEN_MAP`);
         }
     }
 
-    // ADIM 2: Diğer tüm tokenleri çek
-    // (Not: Virtual token zaten yukarıda çekildi ama listede varsa tekrar üstünden geçmesinde sakınca yok, cache'den gelir)
+    // 2. Diğerlerini Çek
     for (const spec of this.pairs) {
-        // Virtual tokeni tekrar çekip yormaya gerek yok
         if (spec.tokenId.toLowerCase() === VIRTUAL_TOKEN_ID) continue;
         await this.pollOne(spec)
     }
@@ -170,51 +171,38 @@ class PriceOrchestrator {
   private async pollOne(spec: PairSpec): Promise<void> {
     const { tokenId, symbol, network, pair } = spec
 
-    // Dexscreener (Strict)
+    // Dexscreener (Strict) - Temizlenmiş adres ile çağır
     const dex: DexscreenerQuote | null = await getDexPairQuoteStrict(network, pair)
     
     if (dex) {
       const baseline = deriveBaseline(dex.priceUsd, dex.changePct)
-      
       const entry: CachedPrice = {
-        tokenId,
-        symbol,
-        pLive: dex.priceUsd,
-        p0: baseline,
-        changePct: dex.changePct,
-        fdv: dex.fdv,
-        ts: new Date(dex.fetchedAt).toISOString(),
-        source: 'dexscreener',
-        dexNetwork: network,
-        dexPair: pair,
+        tokenId, symbol, pLive: dex.priceUsd, p0: baseline, 
+        changePct: dex.changePct, fdv: dex.fdv,
+        ts: new Date(dex.fetchedAt).toISOString(), source: 'dexscreener',
+        dexNetwork: network, dexPair: pair,
         dexUrl: buildPublicViewUrl({ network, pair })
       }
       this.cache.set(tokenId, entry)
       return
     }
 
-    // Gecko fallback
+    // Gecko Fallback
     const gecko = await getGeckoPoolQuote(network, pair, symbol)
     if (gecko) {
       const baseline = deriveBaseline(gecko.priceUsd, gecko.changePct)
       const entry: CachedPrice = {
-        tokenId,
-        symbol,
-        pLive: gecko.priceUsd,
-        p0: baseline,
+        tokenId, symbol, pLive: gecko.priceUsd, p0: baseline, 
         changePct: gecko.changePct,
-        ts: new Date(gecko.fetchedAt).toISOString(),
-        source: 'gecko',
-        dexNetwork: network,
-        dexPair: pair,
+        ts: new Date(gecko.fetchedAt).toISOString(), source: 'gecko',
+        dexNetwork: network, dexPair: pair,
         dexUrl: buildPublicViewUrl({ network, pair })
       }
       this.cache.set(tokenId, entry)
       return
     }
     
-    // Hata durumunda log
-    console.warn(`[PriceOrchestrator] Failed to fetch price for ${symbol} (${network}:${pair})`);
+    console.warn(`[PriceOrchestrator] Failed: ${symbol} (${network}:${pair})`);
   }
 }
 
@@ -224,7 +212,6 @@ export function ensurePriceOrchestrator(): PriceOrchestrator {
   if (!globalAny.__flipflopPriceOrchestrator) {
     globalAny.__flipflopPriceOrchestrator = new PriceOrchestrator()
   }
-
   const inst: PriceOrchestrator = globalAny.__flipflopPriceOrchestrator
   inst.start()
   return inst
