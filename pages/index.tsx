@@ -1415,7 +1415,7 @@ useEffect(() => {
   // UTC 00:00 - 00:05 arasında arayüzü gizler
   // ---------------------------------------------------------
   const nowUTC = new Date();
-  const isFinalizingWindow = nowUTC.getUTCHours() === 0 && nowUTC.getUTCMinutes() < 5;
+  const isFinalizingWindow = true;
 
   if (isFinalizingWindow) {
     return (
