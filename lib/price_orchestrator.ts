@@ -7,7 +7,8 @@ import {
   getDexPairQuote,
   getDexPairQuotesBulk,
   buildPairViewUrl,
-  findDexPairForToken
+  findDexPairForToken,
+  resolveTokenAddressToPair
 } from './dexscreener'
 import { getGeckoPoolQuote } from './gecko'
 
@@ -140,7 +141,18 @@ class PriceOrchestrator {
       dex = await getDexPairQuote(network, pair)
     }
 
-    // Explicit pair başarısızsa token araması yap
+    // Explicit pair başarısızsa önce doğrudan adres üzerinden en iyi pair'i çöz
+    if (!dex && pair) {
+      const resolved = await resolveTokenAddressToPair(network, pair)
+
+      if (resolved) {
+        pair = resolved
+        spec.pair = resolved
+        dex = await getDexPairQuote(network, pair)
+      }
+    }
+
+    // Hala bulunamadıysa token araması yap
     if (!dex) {
       const token = TOKEN_MAP[tokenId]
       const discovered = token ? await findDexPairForToken(token) : null

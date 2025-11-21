@@ -662,6 +662,14 @@ async function resolveTokenToBestPair(
   return null
 }
 
+export async function resolveTokenAddressToPair(
+  network: string,
+  tokenAddress: string
+): Promise<string | null> {
+  if (!network || !tokenAddress) return null
+  return resolveTokenToBestPair(network.toLowerCase(), tokenAddress.toLowerCase())
+}
+
 function pickBestPair(pairs: any[], network: string, token?: string) {
   if (!pairs?.length) return null
 
