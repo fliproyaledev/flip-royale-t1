@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { SyntheticEvent } from 'react'
-import { jsonTokens } from '../lib/tokens' // buildDexscreenerViewUrl kaldırdık, manuel yapacağız
+import { jsonTokens, buildDexscreenerViewUrl } from '../lib/tokens'
 import ThemeToggle from '../components/ThemeToggle'
 
 type PriceRow = {
@@ -57,36 +57,18 @@ export default function PricesPage() {
     try {
       const result = await Promise.all(
         jsonTokens.map(async token => {
+          const defaultView = buildDexscreenerViewUrl(token.dexscreenerUrl, token.dexscreenerNetwork, token.dexscreenerPair) || token.dexscreenerUrl
           try {
             const resp = await fetch(`/api/price?token=${encodeURIComponent(token.id)}`)
             if (!resp.ok) throw new Error(`Request failed with ${resp.status}`)
             const data = await resp.json()
-            
             const price = Number(data?.pLive ?? NaN)
             const baseline = Number(data?.p0 ?? data?.pLive ?? NaN)
-            
             const changePct = Number.isFinite(Number(data?.changePct))
               ? Number(data.changePct)
               : (Number.isFinite(baseline) && baseline > 0 && Number.isFinite(price))
                 ? ((price - baseline) / baseline) * 100
                 : null
-            
-            // --- LİNK DÜZELTME MANTIĞI ---
-            // API'den gelen network ve pair varsa onu kullan, yoksa token listesindekini kullan
-            const finalNetwork = (data?.dexNetwork || token.dexscreenerNetwork || 'base').toLowerCase();
-            const finalPair = (data?.dexPair || token.dexscreenerPair || '').toLowerCase();
-            
-            // Doğru link formatı: https://dexscreener.com/base/0x...
-            // Asla 'api.dexscreener' veya '/pools/' içermemeli.
-            let correctViewUrl = '';
-            if (finalPair) {
-                correctViewUrl = `https://dexscreener.com/${finalNetwork}/${finalPair}`;
-            } else {
-                // Pair yoksa sembol ile aramaya yönlendir
-                correctViewUrl = `https://dexscreener.com/search?q=${token.symbol}`;
-            }
-            // -----------------------------
-
             return {
               tokenId: token.id,
               symbol: token.symbol,
@@ -98,22 +80,12 @@ export default function PricesPage() {
               fdv: data?.fdv ? Number(data.fdv) : null,
               source: data?.source,
               updatedAt: data?.ts,
-              
-              // DÜZELTİLMİŞ LİNKİ BURAYA ATIYORUZ
-              dexscreenerUrl: correctViewUrl, 
-              dexNetwork: finalNetwork, 
-              dexPair: finalPair,
-              
+              dexscreenerUrl: data?.dexUrl || defaultView,
+              dexNetwork: data?.dexNetwork,
+              dexPair: data?.dexPair,
               error: undefined
             } as PriceRow
           } catch (err: any) {
-            // Hata durumunda bile token listesindeki bilgilerle düzgün link oluştur
-            const fallbackNetwork = (token.dexscreenerNetwork || 'base').toLowerCase();
-            const fallbackPair = (token.dexscreenerPair || '').toLowerCase();
-            const fallbackUrl = fallbackPair 
-                ? `https://dexscreener.com/${fallbackNetwork}/${fallbackPair}`
-                : `https://dexscreener.com/search?q=${token.symbol}`;
-
             return {
               tokenId: token.id,
               symbol: token.symbol,
@@ -124,9 +96,9 @@ export default function PricesPage() {
               changePct: null,
               source: undefined,
               updatedAt: undefined,
-              dexscreenerUrl: fallbackUrl, 
-              dexNetwork: fallbackNetwork,
-              dexPair: fallbackPair,
+              dexscreenerUrl: defaultView,
+              dexNetwork: token.dexscreenerNetwork,
+              dexPair: token.dexscreenerPair,
               error: err?.message || 'Unable to fetch price'
             } as PriceRow
           }
@@ -153,6 +125,7 @@ export default function PricesPage() {
         const aChange = Number.isFinite(a.changePct ?? NaN) ? (a.changePct as number) : -Infinity
         const bChange = Number.isFinite(b.changePct ?? NaN) ? (b.changePct as number) : -Infinity
         if (bChange !== aChange) return bChange - aChange
+        // Secondary sort by FDV
         const aFdv = Number.isFinite(a.fdv ?? NaN) ? (a.fdv as number) : -Infinity
         const bFdv = Number.isFinite(b.fdv ?? NaN) ? (b.fdv as number) : -Infinity
         return bFdv - aFdv
@@ -160,6 +133,7 @@ export default function PricesPage() {
         const aFdv = Number.isFinite(a.fdv ?? NaN) ? (a.fdv as number) : -Infinity
         const bFdv = Number.isFinite(b.fdv ?? NaN) ? (b.fdv as number) : -Infinity
         if (bFdv !== aFdv) return bFdv - aFdv
+        // Secondary sort by change %
         const aChange = Number.isFinite(a.changePct ?? NaN) ? (a.changePct as number) : -Infinity
         const bChange = Number.isFinite(b.changePct ?? NaN) ? (b.changePct as number) : -Infinity
         return bChange - aChange
@@ -167,6 +141,7 @@ export default function PricesPage() {
         const aPrice = Number.isFinite(a.price ?? NaN) ? (a.price as number) : -Infinity
         const bPrice = Number.isFinite(b.price ?? NaN) ? (b.price as number) : -Infinity
         if (bPrice !== aPrice) return bPrice - aPrice
+        // Secondary sort by change %
         const aChange = Number.isFinite(a.changePct ?? NaN) ? (a.changePct as number) : -Infinity
         const bChange = Number.isFinite(b.changePct ?? NaN) ? (b.changePct as number) : -Infinity
         return bChange - aChange
@@ -451,3 +426,4 @@ export default function PricesPage() {
     </div>
   )
 }
+
