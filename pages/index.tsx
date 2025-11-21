@@ -1410,6 +1410,61 @@ useEffect(() => {
   const recentRounds = useMemo(() => {
     return [] // Empty for fresh start
   }, [])
+  // ---------------------------------------------------------
+  // FINALIZING EKRANI KONTROLÜ (YENİ)
+  // UTC 00:00 - 00:05 arasında arayüzü gizler
+  // ---------------------------------------------------------
+  const nowUTC = new Date();
+  const isFinalizingWindow = nowUTC.getUTCHours() === 0 && nowUTC.getUTCMinutes() < 5;
+
+  if (isFinalizingWindow) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '2rem',
+        textAlign: 'center',
+        background: 'linear-gradient(135deg, #0f172a, #1e293b)',
+        color: 'white',
+        fontFamily: 'sans-serif'
+      }}>
+        <h1 style={{ 
+          fontSize: '3.5rem', 
+          fontWeight: 900, 
+          marginBottom: '1.5rem', 
+          color: '#fbbf24',
+          textTransform: 'uppercase',
+          letterSpacing: '2px',
+          textShadow: '0 4px 12px rgba(0,0,0,0.5)'
+        }}>
+          Round Finalizing...
+        </h1>
+        <div style={{ 
+          fontSize: '4rem', 
+          marginBottom: '2rem',
+          animation: 'pulse 2s infinite'
+        }}>⏳</div>
+        <p style={{ fontSize: '1.2rem', opacity: 0.8, maxWidth: '600px', lineHeight: '1.6' }}>
+          Global puanlar hesaplanıyor ve yeni tur fiyatları mühürleniyor.<br/>
+          Veri tutarlılığı için lütfen bekleyin.
+        </p>
+        <div style={{
+          marginTop: '2rem',
+          padding: '10px 20px',
+          background: 'rgba(255,255,255,0.1)',
+          borderRadius: '8px',
+          fontSize: '0.9rem',
+          opacity: 0.6
+        }}>
+          Tahmini bekleme süresi: 5 dakika
+        </div>
+      </div>
+    );
+  }
+  // ---------------------------------------------------------
   
 const activeRoundDisplay = currentRound
   const nextRoundDisplay = currentRound + 1
