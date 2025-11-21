@@ -66,3 +66,40 @@ export async function getPriceForToken(tokenId: string) {
       dexPair: cached.dexPair,
       dexUrl: cached.dexUrl,
     }
+  }
+
+  // 🟡 Fallback devreye girecekse → artık random değil, multi-fetch sonucundan gelecek
+  const allPrices = await fetchAllPricesMulti()
+
+  const lower = tokenId.toLowerCase()
+  const match = Object.values(allPrices).find(
+    (x: any) => x.dexUrl?.toLowerCase().includes(lower)
+  ) as any
+
+  if (match) {
+    return {
+      p0: match.price,
+      pLive: match.price,
+      pClose: match.price,
+      changePct: 0,
+      fdv: match.fdv,
+      ts: match.ts,
+      source: 'multi-fetch',
+      dexUrl: match.dexUrl,
+      dexPair: tokenId,
+      dexNetwork: match.dexNetwork,
+    }
+  }
+
+  // 🟡 Son çare fallback (çok düşük ihtimal, multi-fetch çalışırken gerek kalmaz)
+  const base = 1 + Math.random() * 3
+  return {
+    p0: base,
+    pLive: base,
+    pClose: base,
+    changePct: 0,
+    fdv: 0,
+    ts: new Date().toISOString(),
+    source: 'fallback'
+  }
+}
