@@ -3,7 +3,7 @@
 import { TOKEN_MAP, buildDexscreenerViewUrl, parseDexscreenerLink } from './tokens'
 import type { Token } from './tokens'
 import type { DexscreenerPairRef, DexscreenerQuote } from './dexscreener'
-import { getDexPairQuoteStrict, buildPairViewUrl } from './dexscreener'
+import { getDexPairQuoteStrict, buildPairViewUrl, findDexPairForToken } from './dexscreener'
 import { getGeckoPoolQuote } from './gecko'
 
 export type CachedPrice = {
@@ -107,10 +107,29 @@ class PriceOrchestrator {
   }
 
   private async pollOne(spec: PairSpec): Promise<void> {
-    const { tokenId, symbol, network, pair } = spec
+    const { tokenId, symbol } = spec
+
+    let network = spec.network
+    let pair = spec.pair
 
     // Dexscreener (Strict)
-    const dex: DexscreenerQuote | null = await getDexPairQuoteStrict(network, pair)
+    let dex: DexscreenerQuote | null = await getDexPairQuoteStrict(network, pair)
+
+    // Explicit pair başarısızsa token araması yap
+    if (!dex) {
+      const token = TOKEN_MAP[tokenId]
+      const discovered = token ? await findDexPairForToken(token) : null
+
+      if (discovered?.network && discovered?.pair) {
+        network = discovered.network
+        pair = discovered.pair
+        // Bir sonraki poll için spec'i güncelle
+        spec.network = network
+        spec.pair = pair
+
+        dex = await getDexPairQuoteStrict(network, pair)
+      }
+    }
     if (dex) {
       const baseline = deriveBaseline(dex.priceUsd, dex.changePct)
       const entry: CachedPrice = {

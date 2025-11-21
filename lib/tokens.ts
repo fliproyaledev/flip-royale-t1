@@ -42,7 +42,13 @@ function parseDexscreenerLink(input?: string): DexscreenerLink {
     // en gelişmiş pattern (latest/dex/pairs/network/pair)
     if (segments.length >= 5 && segments[0] === 'latest' && segments[1] === 'dex' && segments[2] === 'pairs') {
       network = clean(segments[3])
-      pair = clean(segments[4])
+
+      // Dexscreener API linklerinde "pools/:pair" yapısını da destekle
+      if (segments[4] === 'pools') {
+        pair = clean(segments[5])
+      } else {
+        pair = clean(segments[4])
+      }
     }
     // klasik pattern (pairs/network/pair)
     else if (segments.length >= 3 && segments[0] === 'pairs') {
@@ -53,6 +59,11 @@ function parseDexscreenerLink(input?: string): DexscreenerLink {
     else if (segments.length >= 2) {
       network = clean(segments[0])
       pair = clean(segments[1])
+    }
+
+    // Eğer hala bulunamadıysa son segmenti pair olarak dene (örn: pools/:pair patterni)
+    if (!pair && segments.length >= 1) {
+      pair = clean(segments[segments.length - 1])
     }
 
     if (!pair) pair = url.searchParams.get('pairAddress') || undefined
