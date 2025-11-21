@@ -1,17 +1,18 @@
 import { ensurePriceOrchestrator } from './price_orchestrator'
 
 /**
- * Unified price getter for CRON and backend use
- * Returns p0, pLive, pClose and changePct exactly like /api/price endpoint
+ * Cron ve Backend için Merkezi Fiyat Çekici
+ * Doğrudan Orchestrator'dan (Cache'den) okur.
  */
 export async function getPriceForToken(tokenId: string) {
   const orchestrator = ensurePriceOrchestrator()
   const cached = orchestrator.getOne(tokenId)
 
   if (cached) {
+    // Yüzdelik değişimi hesapla veya cache'den al
     const pct = isFinite(cached.changePct ?? NaN)
       ? Number(cached.changePct)
-      : ((cached.pLive - cached.p0) / cached.p0) * 100
+      : (cached.p0 > 0 ? ((cached.pLive - cached.p0) / cached.p0) * 100 : 0)
 
     return {
       p0: cached.p0,
@@ -27,12 +28,11 @@ export async function getPriceForToken(tokenId: string) {
     }
   }
 
-  // 🟡 FALLBACK (orchestrator henüz 1. dakikayı doldurmadıysa)
-  const base = 1 + Math.random() * 3
+  // Fallback (Eğer veri yoksa)
   return {
-    p0: base,
-    pLive: base,
-    pClose: base,
+    p0: 0,
+    pLive: 0,
+    pClose: 0,
     changePct: 0,
     fdv: 0,
     ts: new Date().toISOString(),
