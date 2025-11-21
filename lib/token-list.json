@@ -5,126 +5,162 @@
       "CARD NAME / TOKEN NAME": "VIRTUAL",
       "TICKER": "$VIRTUAL",
       "GECKO TERMINAL POOL LINK": "https://api.dexscreener.io/latest/dex/pairs/base/pools/0x3f0296bf652e19bca772ec3df08b32732f93014a",
-      "IMAGE NAME": "virtual.png"
+      "IMAGE NAME": "virtual.png",
+      "DEXSCREENER NETWORK": "base",
+      "DEXSCREENER PAIR": "0x3f0296bf652e19bca772ec3df08b32732f93014a"
     },
     {
       "TYPE": "Sentient",
       "CARD NAME / TOKEN NAME": "717ai",
       "TICKER": "$WIRE",
       "GECKO TERMINAL POOL LINK": "https://api.dexscreener.io/latest/dex/pairs/base/pools/0x8ffd336d457ada04a2d5112f8f0c1f1a84577f2f",
-      "IMAGE NAME": "717ai.png"
+      "IMAGE NAME": "717ai.png",
+      "DEXSCREENER NETWORK": "base",
+      "DEXSCREENER PAIR": "0x8ffd336d457ada04a2d5112f8f0c1f1a84577f2f"
     },
     {
       "TYPE": "Sentient",
       "CARD NAME / TOKEN NAME": "aixbt",
       "TICKER": "$AIXBT",
       "GECKO TERMINAL POOL LINK": "https://api.dexscreener.io/latest/dex/pairs/base/pools/0xf1fdc83c3a336bdbdc9fb06e318b08eaddc82ff4",
-      "IMAGE NAME": "aixbt.png"
+      "IMAGE NAME": "aixbt.png",
+      "DEXSCREENER NETWORK": "base",
+      "DEXSCREENER PAIR": "0xf1fdc83c3a336bdbdc9fb06e318b08eaddc82ff4"
     },
     {
       "TYPE": "Sentient",
       "CARD NAME / TOKEN NAME": "Altcoinist",
       "TICKER": "$ALTT",
       "GECKO TERMINAL POOL LINK": "https://api.dexscreener.io/latest/dex/pairs/base/pools/0xd753bcad56de9c3b5c303e68e916307eb2eb6c00",
-      "IMAGE NAME": "altcoinist.png"
+      "IMAGE NAME": "altcoinist.png",
+      "DEXSCREENER NETWORK": "base",
+      "DEXSCREENER PAIR": "0xd753bcad56de9c3b5c303e68e916307eb2eb6c00"
     },
     {
       "TYPE": "Genesis",
       "CARD NAME / TOKEN NAME": "ArAIstotle",
       "TICKER": "$FACY",
       "GECKO TERMINAL POOL LINK": "https://api.dexscreener.io/latest/dex/pairs/base/pools/0xd87ea5f46615e1175c909610766e853faa5f94be",
-      "IMAGE NAME": "araistotle.png"
+      "IMAGE NAME": "araistotle.png",
+      "DEXSCREENER NETWORK": "base",
+      "DEXSCREENER PAIR": "0xd87ea5f46615e1175c909610766e853faa5f94be"
     },
     {
       "TYPE": "Sentient",
       "CARD NAME / TOKEN NAME": "Luna",
       "TICKER": "$LUNA",
       "GECKO TERMINAL POOL LINK": "https://api.dexscreener.io/latest/dex/pairs/base/pools/0xa8e64fb120ce8796594670bae72279c8aa1e5359",
-      "IMAGE NAME": "luna.png"
+      "IMAGE NAME": "luna.png",
+      "DEXSCREENER NETWORK": "base",
+      "DEXSCREENER PAIR": "0xa8e64fb120ce8796594670bae72279c8aa1e5359"
     },
     {
       "TYPE": "Sentient",
       "CARD NAME / TOKEN NAME": "Mamo",
       "TICKER": "$MAMO",
       "GECKO TERMINAL POOL LINK": "https://api.dexscreener.io/latest/dex/pairs/base/pools/0x4a021ba3ab1f0121e7df76f345c547db86cb3468",
-      "IMAGE NAME": "mamo.png"
+      "IMAGE NAME": "mamo.png",
+      "DEXSCREENER NETWORK": "base",
+      "DEXSCREENER PAIR": "0x4a021ba3ab1f0121e7df76f345c547db86cb3468"
     },
     {
       "TYPE": "Sentient",
       "CARD NAME / TOKEN NAME": "MUTE SWAP",
       "TICKER": "$MUTE",
       "GECKO TERMINAL POOL LINK": "https://api.dexscreener.io/latest/dex/pairs/base/pools/0x6ee050f3da4cb50be42129d43d3ffe66c0ecba54",
-      "IMAGE NAME": "mute-swap.png"
+      "IMAGE NAME": "mute-swap.png",
+      "DEXSCREENER NETWORK": "base",
+      "DEXSCREENER PAIR": "0x6ee050f3da4cb50be42129d43d3ffe66c0ecba54"
     },
     {
       "TYPE": "Sentient",
       "CARD NAME / TOKEN NAME": "Ribbita",
       "TICKER": "$TIBBIR",
       "GECKO TERMINAL POOL LINK": "https://api.dexscreener.io/latest/dex/pairs/base/pools/0x0c3b466104545efa096b8f944c1e524e1d0d4888",
-      "IMAGE NAME": "ribbita.png"
+      "IMAGE NAME": "ribbita.png",
+      "DEXSCREENER NETWORK": "base",
+      "DEXSCREENER PAIR": "0x0c3b466104545efa096b8f944c1e524e1d0d4888"
     },
     {
       "TYPE": "Sentient",
       "CARD NAME / TOKEN NAME": "Samur AI",
       "TICKER": "$SAMUR",
       "GECKO TERMINAL POOL LINK": "https://api.dexscreener.io/latest/dex/pairs/base/pools/0x7866f790202fe997fe36560813887541605bdac3",
-      "IMAGE NAME": "samur-ai.png"
+      "IMAGE NAME": "samur-ai.png",
+      "DEXSCREENER NETWORK": "base",
+      "DEXSCREENER PAIR": "0x7866f790202fe997fe36560813887541605bdac3"
     },
     {
       "TYPE": "Sentient",
       "CARD NAME / TOKEN NAME": "SAM",
       "TICKER": "$SAM",
       "GECKO TERMINAL POOL LINK": "https://api.dexscreener.io/latest/dex/pairs/base/pools/0xd72a82022134ba0d417c8d733139057e9bb9ea3f",
-      "IMAGE NAME": "sam.png"
+      "IMAGE NAME": "sam.png",
+      "DEXSCREENER NETWORK": "base",
+      "DEXSCREENER PAIR": "0xd72a82022134ba0d417c8d733139057e9bb9ea3f"
     },
     {
       "TYPE": "Genesis",
       "CARD NAME / TOKEN NAME": "Predi",
       "TICKER": "$PREDI",
       "GECKO TERMINAL POOL LINK": "https://api.dexscreener.io/latest/dex/pairs/base/pools/0xe10604ad5bfca65f17a25747133a40ee3ea608a7",
-      "IMAGE NAME": "predi.png"
+      "IMAGE NAME": "predi.png",
+      "DEXSCREENER NETWORK": "base",
+      "DEXSCREENER PAIR": "0xe10604ad5bfca65f17a25747133a40ee3ea608a7"
     },
     {
       "TYPE": "Genesis",
       "CARD NAME / TOKEN NAME": "Backroom",
       "TICKER": "$ROOM",
       "GECKO TERMINAL POOL LINK": "https://api.dexscreener.io/latest/dex/pairs/base/pools/0xb4c4e80abe1c807b8f30ac72c9420dd6acece8d5",
-      "IMAGE NAME": "backroom.png"
+      "IMAGE NAME": "backroom.png",
+      "DEXSCREENER NETWORK": "base",
+      "DEXSCREENER PAIR": "0xb4c4e80abe1c807b8f30ac72c9420dd6acece8d5"
     },
     {
       "TYPE": "Sentient",
       "CARD NAME / TOKEN NAME": "aidog_agent",
       "TICKER": "$AIDOG",
       "GECKO TERMINAL POOL LINK": "https://api.dexscreener.io/latest/dex/pairs/base/pools/0xdaae8afdeb4d31e4f6a0cdb9d490d4188d48c0a9",
-      "IMAGE NAME": "aidog-agent.png"
+      "IMAGE NAME": "aidog-agent.png",
+      "DEXSCREENER NETWORK": "base",
+      "DEXSCREENER PAIR": "0xdaae8afdeb4d31e4f6a0cdb9d490d4188d48c0a9"
     },
     {
       "TYPE": "Genesis",
       "CARD NAME / TOKEN NAME": "Vader",
       "TICKER": "$VADER",
       "GECKO TERMINAL POOL LINK": "https://api.dexscreener.io/latest/dex/pairs/base/pools/0xa1dddb82501e8fe2d92ad0e8ba331313f501de72",
-      "IMAGE NAME": "vader.png"
+      "IMAGE NAME": "vader.png",
+      "DEXSCREENER NETWORK": "base",
+      "DEXSCREENER PAIR": "0xa1dddb82501e8fe2d92ad0e8ba331313f501de72"
     },
     {
       "TYPE": "Genesis",
       "CARD NAME / TOKEN NAME": "Vpay",
       "TICKER": "$VPAY",
       "GECKO TERMINAL POOL LINK": "https://api.dexscreener.io/latest/dex/pairs/base/pools/0xdeb75b16307e4c3ddb6f6731c303e15cc16a8e82",
-      "IMAGE NAME": "vpay.png"
+      "IMAGE NAME": "vpay.png",
+      "DEXSCREENER NETWORK": "base",
+      "DEXSCREENER PAIR": "0xdeb75b16307e4c3ddb6f6731c303e15cc16a8e82"
     },
     {
       "TYPE": "Genesis",
       "CARD NAME / TOKEN NAME": "Axelrod",
       "TICKER": "$AXR",
       "GECKO TERMINAL POOL LINK": "https://api.dexscreener.io/latest/dex/pairs/base/pools/0x6d5df1d155d79279abd65a98815f7853c2b3a005",
-      "IMAGE NAME": "axelrod.png"
+      "IMAGE NAME": "axelrod.png",
+      "DEXSCREENER NETWORK": "base",
+      "DEXSCREENER PAIR": "0x6d5df1d155d79279abd65a98815f7853c2b3a005"
     },
     {
       "TYPE": "Sentient",
       "CARD NAME / TOKEN NAME": "G.A.M.E",
       "TICKER": "$GAME",
       "GECKO TERMINAL POOL LINK": "https://api.dexscreener.io/latest/dex/pairs/base/pools/0xd418dfe7670c21f682e041f34250c114db5d7789",
-      "IMAGE NAME": "game.png"
+      "IMAGE NAME": "game.png",
+      "DEXSCREENER NETWORK": "base",
+      "DEXSCREENER PAIR": "0xd418dfe7670c21f682e041f34250c114db5d7789"
     }
   ]
 }

@@ -129,13 +129,26 @@ function rowToToken(row: RawRow): Token {
 
   const pool = String(
     row['DEXSCREENER LINK'] ||
-    row['GECKO TERMINAL POOL LINK'] ||
-    row['dexscreenerUrl'] ||
-    ''
+      row['GECKO TERMINAL POOL LINK'] ||
+      row['dexscreenerUrl'] ||
+      ''
   ).trim()
+
+  const network = String(
+    row['DEXSCREENER NETWORK'] || row['dexscreenerNetwork'] || ''
+  )
+    .trim()
+    .toLowerCase()
+
+  const pair = String(row['DEXSCREENER PAIR'] || row['dexscreenerPair'] || '')
+    .trim()
+    .toLowerCase()
 
   const parsed = parseDexscreenerLink(pool)
   const type = String(row['TYPE'] || '').trim()
+
+  const net = network || parsed.network
+  const pr = pair || parsed.pair
 
   // ID üretimi
   const derivedId =
@@ -143,7 +156,7 @@ function rowToToken(row: RawRow): Token {
     imageToId(logoFile) ||
     sanitizeId(name)
 
-  const viewUrl = buildDexscreenerViewUrl(pool)
+  const viewUrl = buildDexscreenerViewUrl(pool, net, pr)
 
   return {
     id: derivedId,
@@ -152,8 +165,8 @@ function rowToToken(row: RawRow): Token {
     logo: logoFile ? `/token-logos/${logoFile}` : '/token-logos/placeholder.png',
     about: type || '',
     dexscreenerUrl: viewUrl || pool || undefined,
-    dexscreenerNetwork: parsed.network,
-    dexscreenerPair: parsed.pair,
+    dexscreenerNetwork: net,
+    dexscreenerPair: pr,
   }
 }
 
