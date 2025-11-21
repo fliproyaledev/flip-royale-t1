@@ -1410,9 +1410,9 @@ useEffect(() => {
   const recentRounds = useMemo(() => {
     return [] // Empty for fresh start
   }, [])
-
-  const activeRoundDisplay = Math.max(currentRound - 1, 0)
-  const nextRoundDisplay = currentRound
+  
+const activeRoundDisplay = currentRound
+  const nextRoundDisplay = currentRound + 1
 
   return (
     <div className="app">
