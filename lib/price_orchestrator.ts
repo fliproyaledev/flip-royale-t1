@@ -2,7 +2,7 @@
 
 import { TOKEN_MAP, buildDexscreenerViewUrl, parseDexscreenerLink } from './tokens'
 import type { Token } from './tokens'
-import type { DexscreenerPairRef, DexscreenerQuote } from './dexscreener'
+import type { DexscreenerQuote } from './dexscreener'
 import { getDexPairQuoteStrict, buildPairViewUrl } from './dexscreener'
 import { getGeckoPoolQuote } from './gecko'
 
@@ -100,13 +100,106 @@ class PriceOrchestrator {
     return Array.from(this.cache.values())
   }
 
+  /**
+   * Yeni poll:
+   *  - Tokenleri network'e göre grupla
+   *  - Her network için tek bir Dexscreener multi-fetch isteği yap
+   *  - Gerekirse token bazında eski tekli fallback'lere dön
+   */
   private async poll(): Promise<void> {
+    if (!this.pairs.length) return
+
+    const byNetwork: Record<string, PairSpec[]> = {}
+
     for (const spec of this.pairs) {
-      await this.pollOne(spec)
+      if (!byNetwork[spec.network]) byNetwork[spec.network] = []
+      byNetwork[spec.network].push(spec)
+    }
+
+    await Promise.all(
+      Object.entries(byNetwork).map(([network, specs]) =>
+        this.pollNetworkBatch(network, specs)
+      )
+    )
+  }
+
+  /**
+   * Belirli bir network için multi-fetch + gerektiğinde per-token fallback
+   */
+  private async pollNetworkBatch(network: string, specs: PairSpec[]): Promise<void> {
+    const pairs = specs.map((s) => s.pair).join(',')
+
+    const url = `https://api.dexscreener.com/latest/dex/pairs/${network}/${pairs}`
+
+    let byPair = new Map<string, any>()
+
+    try {
+      const res = await fetch(url)
+      if (!res.ok) {
+        throw new Error(`Dexscreener multi-fetch failed: ${res.status}`)
+      }
+
+      const data = await res.json()
+
+      for (const p of data.pairs ?? []) {
+        const key = (p.pairAddress || '').toLowerCase()
+        if (!key) continue
+        byPair.set(key, p)
+      }
+    } catch (err) {
+      console.error('Dexscreener batch error', err)
+      // Batch komple çökerse → hepsini tek tek eski mantıkla dene
+      for (const spec of specs) {
+        await this.pollOneSingle(spec)
+      }
+      return
+    }
+
+    const nowIso = new Date().toISOString()
+
+    for (const spec of specs) {
+      const raw = byPair.get(spec.pair)
+
+      if (raw && raw.priceUsd) {
+        // Dexscreener batch'ten başarılı gelenler
+        const price = Number(raw.priceUsd)
+        if (isFinite(price) && price > 0) {
+          const changePct =
+            raw.priceChange && typeof raw.priceChange.h24 !== 'undefined'
+              ? Number(raw.priceChange.h24)
+              : undefined
+
+          const baseline = deriveBaseline(price, changePct)
+
+          const entry: CachedPrice = {
+            tokenId: spec.tokenId,
+            symbol: spec.symbol,
+            pLive: price,
+            p0: baseline,
+            changePct,
+            fdv: raw.fdv != null ? Number(raw.fdv) : undefined,
+            ts: nowIso,
+            source: 'dexscreener',
+            dexNetwork: network,
+            dexPair: spec.pair,
+            dexUrl: raw.url || buildPairViewUrl({ network, pair: spec.pair })
+          }
+
+          this.cache.set(spec.tokenId, entry)
+          continue
+        }
+      }
+
+      // Eğer batch'te o pair yoksa / price null geldiyse → eski tekli fallback
+      await this.pollOneSingle(spec)
     }
   }
 
-  private async pollOne(spec: PairSpec): Promise<void> {
+  /**
+   * Eski tekli mantık (Dexscreener strict + Gecko fallback).
+   * Artık sadece batch'ten veri alınamayan tokenler için çalışacak.
+   */
+  private async pollOneSingle(spec: PairSpec): Promise<void> {
     const { tokenId, symbol, network, pair } = spec
 
     // Dexscreener (Strict)
@@ -150,7 +243,7 @@ class PriceOrchestrator {
       return
     }
 
-    // If both fail → keep last cached value
+    // İkisi de fail ederse → eski cache olduğu gibi kalır
   }
 }
 
