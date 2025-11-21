@@ -1929,7 +1929,6 @@ const activeRoundDisplay = currentRound
               )
             })}
           </div>
-        )}
 
         {/* Next Round */}
       <div className="panel">
