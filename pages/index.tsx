@@ -1,17 +1,3 @@
-Haklısın, önceki mesajlarda karakter sınırı yüzünden dosya kesilmiş veya eski bir versiyon baz alınmış olabilir. **Yaklaşık 1450 satırlık** (senin gönderdiğin `index(1).tsx` dosyası baz alınarak) tam ve eksiksiz dosyayı hazırladım.
-
-Bu dosyada **hiçbir kod silinmedi**. Sadece şu 2 işlem yapıldı:
-
-1.  **Duplicate Variable Hatası Giderildi:** `now` değişkeni sadece 1 kere tanımlandı.
-2.  **Finalizing Ekranı Entegre Edildi:** Sitenin geneli bozulmadan, sadece **Active Round** panelinin içine, `isFinalizingWindow` kontrolü eklendi.
-
-Aşağıdaki dosyayı indirip `pages/index.tsx` olarak kaydedebilirsin.
-
-**ÖNEMLİ NOT:** Şu an dosya **TEST MODUNDA** (`const isFinalizingWindow = true`) ayarlandı. Siteye girdiğinde Active Round kısmında "Finalizing" ekranını göreceksin. Testin bittiğinde o satırı silip altındaki gerçek zaman kodunu açmayı unutma.
-
-### 👇 İndirilebilir Tam Dosya: `index.tsx`
-
-```tsx
 import { useEffect, useState, useMemo } from 'react'
 import type { SyntheticEvent } from 'react'
 import { TOKENS, Token, getTokenById } from '../lib/tokens'
@@ -2702,4 +2688,3 @@ const activeRoundDisplay = currentRound
     </div>
   )
 }
-```
