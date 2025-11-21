@@ -57,15 +57,18 @@ export default function PricesPage() {
     try {
       const result = await Promise.all(
         jsonTokens.map(async token => {
-          // Token listesindeki hardcoded URL/Pair'den view URL'ini oluştur
+          // Token listesindeki hardcoded URL/Pair'den view URL'ini oluştur (KIRILMAZ LİNK)
           const hardcodedView = buildDexscreenerViewUrl(token.dexscreenerUrl, token.dexscreenerNetwork, token.dexscreenerPair) || token.dexscreenerUrl
           
           try {
             const resp = await fetch(`/api/price?token=${encodeURIComponent(token.id)}`)
             if (!resp.ok) throw new Error(`Request failed with ${resp.status}`)
             const data = await resp.json()
+            
+            // Fiyatların USD Çarpımından sonra geldiğini varsayıyoruz (Orchestrator'da yaptık)
             const price = Number(data?.pLive ?? NaN)
             const baseline = Number(data?.p0 ?? data?.pLive ?? NaN)
+            
             const changePct = Number.isFinite(Number(data?.changePct))
               ? Number(data.changePct)
               : (Number.isFinite(baseline) && baseline > 0 && Number.isFinite(price))
@@ -84,11 +87,10 @@ export default function PricesPage() {
               source: data?.source,
               updatedAt: data?.ts,
               
-              // ÖNEMLİ DÜZELTME: Hardcoded view URL'i baskın olmalı
+              // KESİNLİK KONTROLÜ: View URL'i hardcoded linke gitmeli
               dexscreenerUrl: hardcodedView, 
               
-              // Pair ve Network'ü her zaman Orchestrator'dan gelen temiz veriden al.
-              // Orchestrator, artık bizim hardcoded pair'imizi meta data olarak döndürüyor.
+              // Orchestrator'dan gelen pair/network verisini kullanıyoruz (doğru pair olmalı)
               dexNetwork: data?.dexNetwork, 
               dexPair: data?.dexPair,
               
@@ -105,7 +107,7 @@ export default function PricesPage() {
               changePct: null,
               source: undefined,
               updatedAt: undefined,
-              // Eğer API hata verirse bile hardcoded view URL'ini göster
+              // API hata verse bile hardcoded view URL'ini göster
               dexscreenerUrl: hardcodedView, 
               dexNetwork: token.dexscreenerNetwork,
               dexPair: token.dexscreenerPair,
