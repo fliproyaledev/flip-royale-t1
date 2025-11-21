@@ -107,6 +107,11 @@ function calcPoints(p0:number, pNow:number, dir:'UP'|'DOWN', dup:number, boostLe
 export default function Home(){
   const { theme } = useTheme()
   const [now, setNow] = useState(Date.now())
+  // --- ZAMAN KONTROLÜ ---
+  const [now, setNow] = useState(Date.now())
+  // 🛑 TEST MODU: Burayı 'true' yapınca ekran sürekli Finalizing görünür.
+  // Testin bitip her şeyin çalıştığını görünce burayı silip alttaki gerçek kodu açmalısın!
+  const isFinalizingWindow = true;
   const [inventory, setInventory] = useState<Record<string,number>>({})
   const [active, setActive] = useState<RoundPick[]>([])
   const [nextRound, setNextRound] = useState<RoundPick[]>(Array(5).fill(null))
@@ -1410,62 +1415,7 @@ useEffect(() => {
   const recentRounds = useMemo(() => {
     return [] // Empty for fresh start
   }, [])
-  // ---------------------------------------------------------
-  // FINALIZING EKRANI KONTROLÜ (YENİ)
-  // UTC 00:00 - 00:05 arasında arayüzü gizler
-  // ---------------------------------------------------------
-  const nowUTC = new Date();
-  const isFinalizingWindow = true;
 
-  if (isFinalizingWindow) {
-    return (
-      <div style={{
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '2rem',
-        textAlign: 'center',
-        background: 'linear-gradient(135deg, #0f172a, #1e293b)',
-        color: 'white',
-        fontFamily: 'sans-serif'
-      }}>
-        <h1 style={{ 
-          fontSize: '3.5rem', 
-          fontWeight: 900, 
-          marginBottom: '1.5rem', 
-          color: '#fbbf24',
-          textTransform: 'uppercase',
-          letterSpacing: '2px',
-          textShadow: '0 4px 12px rgba(0,0,0,0.5)'
-        }}>
-          Round Finalizing...
-        </h1>
-        <div style={{ 
-          fontSize: '4rem', 
-          marginBottom: '2rem',
-          animation: 'pulse 2s infinite'
-        }}>⏳</div>
-        <p style={{ fontSize: '1.2rem', opacity: 0.8, maxWidth: '600px', lineHeight: '1.6' }}>
-          Global puanlar hesaplanıyor ve yeni tur fiyatları mühürleniyor.<br/>
-          Veri tutarlılığı için lütfen bekleyin.
-        </p>
-        <div style={{
-          marginTop: '2rem',
-          padding: '10px 20px',
-          background: 'rgba(255,255,255,0.1)',
-          borderRadius: '8px',
-          fontSize: '0.9rem',
-          opacity: 0.6
-        }}>
-          Tahmini bekleme süresi: 5 dakika
-        </div>
-      </div>
-    );
-  }
-  // ---------------------------------------------------------
-  
 const activeRoundDisplay = currentRound
   const nextRoundDisplay = currentRound + 1
 
@@ -1749,13 +1699,52 @@ const activeRoundDisplay = currentRound
           )}
           </div>
         <div className="sep"></div>
-
-        <div className="picks" style={{display:'grid', gridTemplateColumns:'repeat(5, minmax(160px, 1fr))', gap:14}}>
+{/* Active Round Panel Content */}
+        {isFinalizingWindow ? (
+          // --- FINALIZING GÖRÜNÜMÜ (Sadece bu panelin içinde) ---
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            minHeight: '300px',
+            background: 'rgba(0,0,0,0.2)',
+            borderRadius: 16,
+            border: '2px dashed rgba(255,255,255,0.1)',
+            textAlign: 'center',
+            padding: 20
+          }}>
+            <div style={{ fontSize: '3rem', marginBottom: '1rem', animation: 'pulse 2s infinite' }}>
+              ⏳
+            </div>
+            <h3 style={{ 
+              fontSize: '1.8rem', 
+              fontWeight: 900, 
+              color: '#fbbf24', 
+              textTransform: 'uppercase', 
+              letterSpacing: 1.5,
+              marginBottom: '0.5rem'
+            }}>
+              Round Finalizing...
+            </h3>
+            <p style={{ color: 'rgba(255,255,255,0.7)', maxWidth: '400px', lineHeight: 1.5 }}>
+              Calculating global scores and sealing new prices.<br/>
+              Please wait for data consistency.
+            </p>
+          </div>
+        ) : (
+          // --- NORMAL KART GÖRÜNÜMÜ (Eski kodunuz buraya) ---
+          <div className="picks" style={{display:'grid', gridTemplateColumns:'repeat(5, minmax(160px, 1fr))', gap:14}}>
               {active.map((p, index) => {
                 const tok = getTokenById(p.tokenId) || TOKENS[0]
-                if (!tok) return null // Safety check for filtered tokens
+                if (!tok) return null
                 const price = prices[p.tokenId]
-                const points = price ? calcPoints(price.p0, price.pLive, p.dir, p.duplicateIndex, boost.level, boostActive) : 0
+                // Not: startPrice kullanıcı verisinden geleceği için burayı güncelledik
+                const baseline = p.startPrice || (price ? price.p0 : 0)
+                const current = price ? price.pLive : 0
+                
+                // Puan hesaplaması (frontend gösterimi için)
+                const points = price ? calcPoints(baseline, current, p.dir, p.duplicateIndex, boost.level, boostActive) : 0
                 
               return (
                   <div key={index} style={{
@@ -1916,8 +1905,9 @@ const activeRoundDisplay = currentRound
                         {p.locked ? '🔒 Locked Points: ' : 'Live Points: '}
                         {(() => {
                           try {
-                            const live = calculateLivePoints(p)
-                            return live > 0 ? `+${live}` : live
+                            // Burada artık direkt yukarıda hesapladığımız points değişkenini kullanabiliriz
+                            // ya da fonksiyonu çağırabiliriz ama mühürlenmiş fiyat için:
+                            return points > 0 ? `+${points}` : points
                           } catch {
                             return 0
                           }
@@ -1941,7 +1931,7 @@ const activeRoundDisplay = currentRound
               )
             })}
           </div>
-      </div>
+        )}
 
         {/* Next Round */}
       <div className="panel">
