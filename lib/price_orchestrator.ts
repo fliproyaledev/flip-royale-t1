@@ -3,7 +3,7 @@
 import { TOKEN_MAP, buildDexscreenerViewUrl, parseDexscreenerLink } from './tokens'
 import type { Token } from './tokens'
 import type { DexscreenerPairRef, DexscreenerQuote } from './dexscreener'
-import { getDexPairQuoteStrict, buildPairViewUrl, findDexPairForToken } from './dexscreener'
+import { getDexPairQuote, buildPairViewUrl, findDexPairForToken } from './dexscreener'
 import { getGeckoPoolQuote } from './gecko'
 
 export type CachedPrice = {
@@ -101,9 +101,7 @@ class PriceOrchestrator {
   }
 
   private async poll(): Promise<void> {
-    for (const spec of this.pairs) {
-      await this.pollOne(spec)
-    }
+    await Promise.allSettled(this.pairs.map((spec) => this.pollOne(spec)))
   }
 
   private async pollOne(spec: PairSpec): Promise<void> {
@@ -113,7 +111,7 @@ class PriceOrchestrator {
     let pair = spec.pair
 
     // Dexscreener (Strict)
-    let dex: DexscreenerQuote | null = await getDexPairQuoteStrict(network, pair)
+    let dex: DexscreenerQuote | null = await getDexPairQuote(network, pair)
 
     // Explicit pair başarısızsa token araması yap
     if (!dex) {
@@ -127,7 +125,7 @@ class PriceOrchestrator {
         spec.network = network
         spec.pair = pair
 
-        dex = await getDexPairQuoteStrict(network, pair)
+        dex = await getDexPairQuote(network, pair)
       }
     }
     if (dex) {
