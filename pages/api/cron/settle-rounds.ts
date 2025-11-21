@@ -125,7 +125,7 @@ export default async function handler(
       if (!Array.isArray(user.nextRound)) user.nextRound = Array(5).fill(null);
 
       // Eğer bu kullanıcı bugün zaten işlendiyse atla (Çifte işlem koruması)
-      if (user.lastSettledDay === today) continue;
+     // if (user.lastSettledDay === today) continue;
 
       try {
         let totalPoints = 0;
@@ -220,3 +220,4 @@ export default async function handler(
     return res.status(500).json({ ok: false, error: err.message });
   }
 }
+
