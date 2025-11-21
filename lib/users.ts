@@ -23,6 +23,7 @@ export type RoundPick = {
   locked: boolean
   pLock?: number
   pointsLocked?: number
+  startPrice?: number // <-- EKLENDİ: Mühürlenmiş başlangıç fiyatı için
 }
 
 export type UserRecord = {
