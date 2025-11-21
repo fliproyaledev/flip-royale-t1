@@ -1,5 +1,3 @@
-// lib/price_orchestrator.ts
-
 import { TOKEN_MAP, buildDexscreenerViewUrl, parseDexscreenerLink } from './tokens'
 import type { Token } from './tokens'
 import type { DexscreenerPairRef, DexscreenerQuote } from './dexscreener'
@@ -122,8 +120,9 @@ class PriceOrchestrator {
         fdv: dex.fdv,
         ts: new Date(dex.fetchedAt).toISOString(),
         source: 'dexscreener',
+        // KİLİTLEME: API'den gelen veriyi değil, bizim istediğimiz pair'i meta data olarak saklıyoruz.
         dexNetwork: network,
-        dexPair: pair,
+        dexPair: pair, 
         dexUrl: buildPairViewUrl({ network, pair })
       }
       this.cache.set(tokenId, entry)
@@ -142,6 +141,7 @@ class PriceOrchestrator {
         changePct: gecko.changePct,
         ts: new Date(gecko.fetchedAt).toISOString(),
         source: 'gecko',
+        // KİLİTLEME: API'den gelen veriyi değil, bizim istediğimiz pair'i meta data olarak saklıyoruz.
         dexNetwork: network,
         dexPair: pair,
         dexUrl: buildDexscreenerViewUrl(undefined, network, pair)
