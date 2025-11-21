@@ -31,33 +31,28 @@ function normalize(str: string | undefined | null) {
 
 /**
  * tokenId -> token-list.json satırı
- * tokenId; isim, isim lower, ticker (WIRE), ticker lower vb. ne gelirse
- * yakalayabilecek şekilde esnek tutuldu.
  */
 function findRowForToken(tokenId: string): TokenRow | null {
   const id = normalize(tokenId)
-
   if (!id) return null
 
-  // Önce direkt isim eşleşmesi
+  // 1) İsim ile birebir eşleşme
   let row =
     rows.find(
       (r) => normalize(r['CARD NAME / TOKEN NAME']) === id
     ) || null
-
   if (row) return row
 
-  // Sonra ticker (WIRE, ALTT vs.) ile eşleşmeye çalış
+  // 2) Ticker ile eşleşme (WIRE, ALTT vs.)
   row =
     rows.find((r) => {
       const tickerRaw = (r.TICKER || '').replace('$', '')
       const tickerNorm = normalize(tickerRaw)
       return tickerNorm === id
     }) || null
-
   if (row) return row
 
-  // Son çare: tokenId bir isim parçasıysa (ör: 'wire', 'virgen')
+  // 3) İsim / ticker içinde geçiyorsa
   row =
     rows.find((r) => {
       const nameNorm = normalize(r['CARD NAME / TOKEN NAME'])
@@ -74,6 +69,31 @@ function findRowForToken(tokenId: string): TokenRow | null {
   return row || null
 }
 
+/**
+ * Her türlü "pool link" içinden chainId + pairId çıkar
+ * Örn:
+ *  - https://api.dexscreener.io/latest/dex/pairs/base/pools/0xABC...
+ *  - https://dexscreener.com/base/0xABC...
+ *  - https://www.geckoterminal.com/base/pools/0xABC...
+ */
+function getDexParamsFromLink(rawLink: string): { chainId: string; pairId: string } | null {
+  const link = (rawLink || '').trim()
+  if (!link) return null
+
+  // 0x... adresini yakala
+  const addrMatch = link.match(/0x[0-9a-fA-F]{40}/)
+  if (!addrMatch) return null
+  const pairId = addrMatch[0]
+
+  // chainId tahmini: linkte geçen bilinen chainlerden biri
+  const chainMatch = link.match(
+    /(ethereum|bsc|bnb|polygon|matic|avalanche|avax|fantom|ftm|harmony|arbitrum|optimism|base|blast|scroll|linea|mantle|solana)/i
+  )
+  const chainId = chainMatch ? chainMatch[1].toLowerCase() : 'base'
+
+  return { chainId, pairId }
+}
+
 function deriveBaseline(currentPrice: number, changePct?: number): number {
   if (!isFinite(changePct ?? NaN) || (changePct as number) <= -100 || changePct === 0) {
     return currentPrice
@@ -83,29 +103,34 @@ function deriveBaseline(currentPrice: number, changePct?: number): number {
 }
 
 /**
- * token-list.json içindeki linkten direkt Dexscreener (veya ne verdiyse) çağır
+ * token-list.json satırından gerçek Dexscreener API endpoint'ine gidip fiyat çeker
  */
 async function fetchPriceFromRow(row: TokenRow): Promise<DirectPriceResult | null> {
-  const url = row['GECKO TERMINAL POOL LINK']
-  if (!url) return null
+  const params = getDexParamsFromLink(row['GECKO TERMINAL POOL LINK'])
+  if (!params) {
+    console.error('No pairId/chainId could be derived from link for', row['CARD NAME / TOKEN NAME'])
+    return null
+  }
+
+  const { chainId, pairId } = params
+  const apiUrl = `https://api.dexscreener.com/latest/dex/pairs/${chainId}/${pairId}`
 
   try {
-    const res = await fetch(url, {
+    const res = await fetch(apiUrl, {
       headers: {
         Accept: 'application/json'
       }
     })
 
     if (!res.ok) {
-      console.error('Price fetch error:', res.status, url)
+      console.error('Dexscreener API error:', res.status, apiUrl)
       return null
     }
 
     const data = await res.json()
-
     const pair = Array.isArray(data?.pairs) ? data.pairs[0] : null
     if (!pair || !pair.priceUsd) {
-      console.error('No priceUsd in response for', row['CARD NAME / TOKEN NAME'])
+      console.error('No priceUsd in Dexscreener response for', row['CARD NAME / TOKEN NAME'])
       return null
     }
 
@@ -120,24 +145,11 @@ async function fetchPriceFromRow(row: TokenRow): Promise<DirectPriceResult | nul
     const baseline = deriveBaseline(price, changeRaw)
     const fdv = pair.fdv != null ? Number(pair.fdv) : 0
 
-    const dexNetwork =
-      typeof pair.chainId === 'string' && pair.chainId.length > 0
-        ? String(pair.chainId)
-        : 'base'
-
-    const dexPair =
-      typeof pair.pairAddress === 'string' && pair.pairAddress.length > 0
-        ? String(pair.pairAddress)
-        : typeof pair.poolAddress === 'string' && pair.poolAddress.length > 0
-          ? String(pair.poolAddress)
-          : ''
-
-    const dexUrl =
-      typeof pair.url === 'string' && pair.url.length > 0
-        ? String(pair.url)
-        : dexPair
-          ? `https://dexscreener.com/${dexNetwork}/${dexPair}`
-          : undefined
+    const dexNetwork = String(pair.chainId || chainId || 'base')
+    const dexPair = String(pair.pairAddress || pairId)
+    const dexUrl = typeof pair.url === 'string' && pair.url.length > 0
+      ? String(pair.url)
+      : `https://dexscreener.com/${dexNetwork}/${dexPair}`
 
     return {
       p0: baseline,
@@ -146,9 +158,9 @@ async function fetchPriceFromRow(row: TokenRow): Promise<DirectPriceResult | nul
       changePct: isFinite(changeRaw) ? changeRaw : 0,
       fdv,
       ts: new Date().toISOString(),
-      source: 'dexscreener-direct-json',
+      source: 'dexscreener-direct',
       dexNetwork,
-      dexPair: dexPair || undefined,
+      dexPair,
       dexUrl
     }
   } catch (err) {
@@ -162,7 +174,7 @@ async function fetchPriceFromRow(row: TokenRow): Promise<DirectPriceResult | nul
  * Returns p0, pLive, pClose and changePct exactly like /api/price endpoint
  */
 export async function getPriceForToken(tokenId: string) {
-  // 1️⃣ token-list.json’da bu tokenId'ye karşılık gelen satırı bul
+  // 1️⃣ token-list.json’da satırı bul
   const row = findRowForToken(tokenId)
 
   if (row) {
@@ -174,7 +186,7 @@ export async function getPriceForToken(tokenId: string) {
     console.warn('No row found in token-list.json for tokenId:', tokenId)
   }
 
-  // 2️⃣ Son çare: random fallback (artık yalnızca gerçekten çözümsüz kaldığında)
+  // 2️⃣ Son çare: random fallback (artık sadece gerçekten mecbur kalırsak)
   console.warn('FALLBACK price used for token', tokenId)
   const base = 1 + Math.random() * 3
   return {
