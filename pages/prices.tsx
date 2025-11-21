@@ -57,7 +57,9 @@ export default function PricesPage() {
     try {
       const result = await Promise.all(
         jsonTokens.map(async token => {
-          const defaultView = buildDexscreenerViewUrl(token.dexscreenerUrl, token.dexscreenerNetwork, token.dexscreenerPair) || token.dexscreenerUrl
+          // Token listesindeki hardcoded URL/Pair'den view URL'ini oluştur
+          const hardcodedView = buildDexscreenerViewUrl(token.dexscreenerUrl, token.dexscreenerNetwork, token.dexscreenerPair) || token.dexscreenerUrl
+          
           try {
             const resp = await fetch(`/api/price?token=${encodeURIComponent(token.id)}`)
             if (!resp.ok) throw new Error(`Request failed with ${resp.status}`)
@@ -69,6 +71,7 @@ export default function PricesPage() {
               : (Number.isFinite(baseline) && baseline > 0 && Number.isFinite(price))
                 ? ((price - baseline) / baseline) * 100
                 : null
+            
             return {
               tokenId: token.id,
               symbol: token.symbol,
@@ -80,9 +83,15 @@ export default function PricesPage() {
               fdv: data?.fdv ? Number(data.fdv) : null,
               source: data?.source,
               updatedAt: data?.ts,
-              dexscreenerUrl: data?.dexUrl || defaultView,
-              dexNetwork: data?.dexNetwork,
+              
+              // ÖNEMLİ DÜZELTME: Hardcoded view URL'i baskın olmalı
+              dexscreenerUrl: hardcodedView, 
+              
+              // Pair ve Network'ü her zaman Orchestrator'dan gelen temiz veriden al.
+              // Orchestrator, artık bizim hardcoded pair'imizi meta data olarak döndürüyor.
+              dexNetwork: data?.dexNetwork, 
               dexPair: data?.dexPair,
+              
               error: undefined
             } as PriceRow
           } catch (err: any) {
@@ -96,7 +105,8 @@ export default function PricesPage() {
               changePct: null,
               source: undefined,
               updatedAt: undefined,
-              dexscreenerUrl: defaultView,
+              // Eğer API hata verirse bile hardcoded view URL'ini göster
+              dexscreenerUrl: hardcodedView, 
               dexNetwork: token.dexscreenerNetwork,
               dexPair: token.dexscreenerPair,
               error: err?.message || 'Unable to fetch price'
@@ -125,7 +135,6 @@ export default function PricesPage() {
         const aChange = Number.isFinite(a.changePct ?? NaN) ? (a.changePct as number) : -Infinity
         const bChange = Number.isFinite(b.changePct ?? NaN) ? (b.changePct as number) : -Infinity
         if (bChange !== aChange) return bChange - aChange
-        // Secondary sort by FDV
         const aFdv = Number.isFinite(a.fdv ?? NaN) ? (a.fdv as number) : -Infinity
         const bFdv = Number.isFinite(b.fdv ?? NaN) ? (b.fdv as number) : -Infinity
         return bFdv - aFdv
@@ -133,7 +142,6 @@ export default function PricesPage() {
         const aFdv = Number.isFinite(a.fdv ?? NaN) ? (a.fdv as number) : -Infinity
         const bFdv = Number.isFinite(b.fdv ?? NaN) ? (b.fdv as number) : -Infinity
         if (bFdv !== aFdv) return bFdv - aFdv
-        // Secondary sort by change %
         const aChange = Number.isFinite(a.changePct ?? NaN) ? (a.changePct as number) : -Infinity
         const bChange = Number.isFinite(b.changePct ?? NaN) ? (b.changePct as number) : -Infinity
         return bChange - aChange
@@ -141,7 +149,6 @@ export default function PricesPage() {
         const aPrice = Number.isFinite(a.price ?? NaN) ? (a.price as number) : -Infinity
         const bPrice = Number.isFinite(b.price ?? NaN) ? (b.price as number) : -Infinity
         if (bPrice !== aPrice) return bPrice - aPrice
-        // Secondary sort by change %
         const aChange = Number.isFinite(a.changePct ?? NaN) ? (a.changePct as number) : -Infinity
         const bChange = Number.isFinite(b.changePct ?? NaN) ? (b.changePct as number) : -Infinity
         return bChange - aChange
@@ -426,4 +433,3 @@ export default function PricesPage() {
     </div>
   )
 }
-
