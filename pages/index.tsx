@@ -112,13 +112,13 @@ export default function Home(){
 
   // 🛑 TEST MODU AÇIK: 'true' olduğu için Active Round panelinde Finalizing göreceksin.
   // Test bitince burayı silip alttaki yorum satırını açmalısın.
-  const isFinalizingWindow = true; 
+ // const isFinalizingWindow = true; 
 
    // ✅ GERÇEK KOD (Test bitince bunu aç):
-  /*
+  
   const nowDate = new Date();
   const isFinalizingWindow = nowDate.getUTCHours() === 0 && nowDate.getUTCMinutes() < 5;
-  */
+  
   // ------------------------------------
 
   const [inventory, setInventory] = useState<Record<string,number>>({})
