@@ -112,11 +112,13 @@ export default function Home(){
 
   // 🛑 TEST MODU AÇIK: 'true' olduğu için Active Round panelinde Finalizing göreceksin.
   // Test bitince burayı silip alttaki yorum satırını açmalısın.
-  //const isFinalizingWindow = true; 
+  const isFinalizingWindow = true; 
 
    // ✅ GERÇEK KOD (Test bitince bunu aç):
+  /*
   const nowDate = new Date();
   const isFinalizingWindow = nowDate.getUTCHours() === 0 && nowDate.getUTCMinutes() < 5;
+  */
   // ------------------------------------
 
   const [inventory, setInventory] = useState<Record<string,number>>({})
@@ -1550,8 +1552,7 @@ const activeRoundDisplay = currentRound
           )}
           </div>
         <div className="sep"></div>
-
-        {/* ACTIVE ROUND CONTENT (CONDITIONAL) */}
+{/* --- YENİ KOD BAŞLANGICI --- */}
         {isFinalizingWindow ? (
           <div style={{
             display: 'flex',
@@ -1770,9 +1771,9 @@ const activeRoundDisplay = currentRound
             })}
           </div>
         )}
-      </div>
-
+        {/* --- YENİ KOD BİTİŞİ --- */}
         {/* Next Round */}
+{/* Next Round Panel */}
       <div className="panel">
         <div className="row" style={{alignItems:'center', gap:12}}>
           <h2 style={{
@@ -1780,7 +1781,7 @@ const activeRoundDisplay = currentRound
             letterSpacing:1.2, 
             textTransform:'uppercase', 
             color: theme === 'light' ? '#0a2c21' : '#f8fafc', 
-              textShadow: theme === 'light' ? 'none' : '0 3px 10px rgba(0,0,0,0.35)'
+            textShadow: theme === 'light' ? 'none' : '0 3px 10px rgba(0,0,0,0.35)'
           }}>Next Round</h2>
           <span className="badge" style={{
             background:'rgba(255,255,255,0.1)',
@@ -1795,309 +1796,266 @@ const activeRoundDisplay = currentRound
         </div>
         <div className="sep"></div>
 
-        <div className="picks" style={{display:'grid', gridTemplateColumns:'repeat(5, minmax(160px, 1fr))', gap:14}}>
-           {Array.from({ length: 5 }, (_, index) => {
-             const p = nextRound[index]
-             
-             if (p) {
-               const tok = getTokenById(p.tokenId) || TOKENS[0]
-               if (!tok) return null // Safety check
-               
-              return (
-                <div key={index} style={{
-                   background: `linear-gradient(135deg, ${getGradientColor(index)}, ${getGradientColor(index + 1)})`,
-                   borderRadius: 18,
-                  padding: 14,
-                   position: 'relative',
-                  minHeight: 220,
-                   display: 'flex',
-                   flexDirection: 'column',
-                   justifyContent: 'space-between',
-                   border: '1px solid rgba(255,255,255,0.2)',
-                   boxShadow: '0 8px 26px rgba(0,0,0,0.18), 0 3px 16px rgba(0,0,0,0.12)',
-                   cursor: 'pointer'
-                 }}>
-                   
-                   {/* Duplicate badge */}
-                   {p.duplicateIndex > 1 && (
-                    <div style={{
-                       position: 'absolute',
-                       top: 12,
-                       left: 12,
-                       background: 'rgba(0,0,0,0.7)',
-                       color: 'white',
-                       padding: '4px 8px',
-                       borderRadius: 6,
-                      fontSize: 12,
-                       border: '1px solid rgba(255,255,255,0.3)',
-                       fontWeight: 600
-                     }}>
-                       dup x{p.duplicateIndex}
+        {/* --- FİNALIZING KONTROLÜ BAŞLANGICI (NEXT ROUND) --- */}
+        {isFinalizingWindow ? (
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            minHeight: '300px',
+            background: 'rgba(0,0,0,0.2)',
+            borderRadius: 16,
+            border: '2px dashed rgba(255,255,255,0.1)',
+            textAlign: 'center',
+            padding: 20,
+            opacity: 0.8
+          }}>
+            <div style={{ fontSize: '2.5rem', marginBottom: '1rem', filter: 'grayscale(1)' }}>🔒</div>
+            <h3 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#fbbf24', marginBottom: '0.5rem' }}>
+              Selections Locked
+            </h3>
+            <p style={{ color: 'rgba(255,255,255,0.6)', maxWidth: '400px', lineHeight: 1.5 }}>
+              Next round preparation in progress.<br/>
+              Selections will reopen shortly.
+            </p>
           </div>
-        )}
+        ) : (
+          /* --- NORMAL NEXT ROUND İÇERİĞİ --- */
+          <>
+            <div className="picks" style={{display:'grid', gridTemplateColumns:'repeat(5, minmax(160px, 1fr))', gap:14}}>
+              {Array.from({ length: 5 }, (_, index) => {
+                const p = nextRound[index]
+                
+                if (p) {
+                  const tok = getTokenById(p.tokenId) || TOKENS[0]
+                  if (!tok) return null
+                  
+                  return (
+                    <div key={index} style={{
+                      background: `linear-gradient(135deg, ${getGradientColor(index)}, ${getGradientColor(index + 1)})`,
+                      borderRadius: 18,
+                      padding: 14,
+                      position: 'relative',
+                      minHeight: 220,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      boxShadow: '0 8px 26px rgba(0,0,0,0.18), 0 3px 16px rgba(0,0,0,0.12)',
+                      cursor: 'pointer'
+                    }}>
+                      {p.duplicateIndex > 1 && (
+                        <div style={{
+                          position: 'absolute',
+                          top: 12,
+                          left: 12,
+                          background: 'rgba(0,0,0,0.7)',
+                          color: 'white',
+                          padding: '4px 8px',
+                          borderRadius: 6,
+                          fontSize: 12,
+                          border: '1px solid rgba(255,255,255,0.3)',
+                          fontWeight: 600
+                        }}>
+                          dup x{p.duplicateIndex}
+                        </div>
+                      )}
 
-                  <div style={{
-                    width: 100,
-                    height: 100,
-                     borderRadius: '50%',
-                     background: 'rgba(255,255,255,0.15)',
-                     display: 'flex',
-                     alignItems: 'center',
-                     justifyContent: 'center',
-                     margin: '0 auto 14px',
-                    border: '2px solid rgba(255,255,255,0.22)',
-                     boxShadow: '0 10px 24px rgba(0,0,0,0.28)',
-                     position: 'relative',
-                     overflow: 'hidden'
-                   }}>
-                     <img
-                       src={tok.logo}
-                       alt={tok.symbol}
-                       style={{
-                       width: 92,
-                       height: 92,
-                         borderRadius: '50%',
-                         objectFit: 'cover',
-                         position: 'relative',
-                         zIndex: 2,
-                         border: '2px solid rgba(255,255,255,0.2)'
+                      <div style={{
+                        width: 100,
+                        height: 100,
+                        borderRadius: '50%',
+                        background: 'rgba(255,255,255,0.15)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        margin: '0 auto 14px',
+                        border: '2px solid rgba(255,255,255,0.22)',
+                        boxShadow: '0 10px 24px rgba(0,0,0,0.28)',
+                        position: 'relative',
+                        overflow: 'hidden'
+                      }}>
+                        <img
+                          src={tok.logo}
+                          alt={tok.symbol}
+                          style={{
+                            width: 92,
+                            height: 92,
+                            borderRadius: '50%',
+                            objectFit: 'cover',
+                            position: 'relative',
+                            zIndex: 2,
+                            border: '2px solid rgba(255,255,255,0.2)'
+                          }}
+                          onError={handleImageFallback}
+                        />
+                      </div>
+
+                      <div style={{textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between'}}>
+                        <div>
+                          <div style={{fontSize: 16, fontWeight: 900, color: 'white', marginBottom: 4, textShadow: '0 2px 4px rgba(0,0,0,0.5)', letterSpacing: 0.5}}>
+                            {tok.symbol}
+                          </div>
+                          <div style={{fontSize: 11, color: 'rgba(255,255,255,0.82)', marginBottom: 8, lineHeight: 1.4, fontWeight: 600, letterSpacing: 0.4}}>
+                            {tok.about}
+                          </div>
+                        </div>
+                        
+                        <div style={{marginBottom: 12}}>
+                          <div style={{display: 'flex', gap: 8, marginBottom: 10, justifyContent: 'center'}}>
+                            <button 
+                              className={`btn ${p.dir==='UP'?'btn-up active':''}`} 
+                              style={{fontSize: 13, padding: '8px 14px', fontWeight: 600}}
+                              onClick={() => {
+                                const newNextRound = [...nextRound]
+                                newNextRound[index].dir = 'UP'
+                                setNextRound(newNextRound)
+                                setNextRoundLoaded(true)
+                                setNextRoundSaved(false)
+                              }}
+                            >
+                              ▲ UP
+                            </button>
+                            <button 
+                              className={`btn ${p.dir==='DOWN'?'btn-down active':''}`} 
+                              style={{fontSize: 13, padding: '8px 14px', fontWeight: 600}}
+                              onClick={() => {
+                                const newNextRound = [...nextRound]
+                                newNextRound[index].dir = 'DOWN'
+                                setNextRound(newNextRound)
+                                setNextRoundLoaded(true)
+                                setNextRoundSaved(false)
+                              }}
+                            >
+                              ▼ DOWN
+                            </button>
+                          </div>
+                          
+                          <button 
+                            className="btn" 
+                            style={{fontSize: 10, padding: '6px 12px', fontWeight: 600}}
+                            onClick={() => removeFromNextRound(index)}
+                            disabled={nextRoundSaved}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                } else {
+                  // Empty slot
+                  return (
+                    <div key={index}
+                      onClick={() => !nextRoundSaved && setModalOpen({open: true, type: 'select'})}
+                      style={{
+                        border: '2px dashed rgba(255,255,255,0.3)',
+                        background: 'rgba(255,255,255,0.05)',
+                        borderRadius: 20,
+                        padding: 24,
+                        cursor: nextRoundSaved ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 12,
+                        minHeight: 240,
+                        transition: 'all 0.3s ease',
+                        opacity: nextRoundSaved ? 0.5 : 1
                       }}
-                      onError={handleImageFallback}
-                     />
-      </div>
-
-                  <div style={{textAlign: 'center', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between'}}>
-                    <div>
-                      <div style={{fontSize: 16, fontWeight: 900, color: 'white', marginBottom: 4, textShadow: '0 2px 4px rgba(0,0,0,0.5)', letterSpacing: 0.5}}>
-                         {tok.symbol}
-                       </div>
-                      <div style={{fontSize: 11, color: 'rgba(255,255,255,0.82)', marginBottom: 8, lineHeight: 1.4, fontWeight: 600, letterSpacing: 0.4}}>
-                         {tok.about}
-                       </div>
-                     </div>
-                     
-                    <div style={{marginBottom: 12}}>
-                      <div style={{display: 'flex', gap: 8, marginBottom: 10, justifyContent: 'center'}}>
-                         <button 
-                           className={`btn ${p.dir==='UP'?'btn-up active':''}`} 
-                          style={{fontSize: 13, padding: '8px 14px', fontWeight: 600}}
-                           onClick={() => {
-                             const newNextRound = [...nextRound]
-                             newNextRound[index].dir = 'UP'
-                             setNextRound(newNextRound)
-                             setNextRoundLoaded(true)
-                             setNextRoundSaved(false) // Mark as unsaved when modified
-                             // Auto-save will handle persistence via useEffect
-                           }}
-                         >
-                           ▲ UP
-                         </button>
-                         <button 
-                           className={`btn ${p.dir==='DOWN'?'btn-down active':''}`} 
-                          style={{fontSize: 13, padding: '8px 14px', fontWeight: 600}}
-                           onClick={() => {
-                             const newNextRound = [...nextRound]
-                             newNextRound[index].dir = 'DOWN'
-                             setNextRound(newNextRound)
-                             setNextRoundLoaded(true)
-                             setNextRoundSaved(false) // Mark as unsaved when modified
-                           }}
-                         >
-                           ▼ DOWN
-                         </button>
-                       </div>
-                       
-                       <button 
-                         className="btn" 
-                        style={{fontSize: 10, padding: '6px 12px', fontWeight: 600}}
-                         onClick={() => removeFromNextRound(index)}
-                         disabled={nextRoundSaved}
-                       >
-                         Remove
-                       </button>
-                     </div>
-                  </div>
-                </div>
-              )
-             } else {
-               // Empty slot
-               return (
-                 <div key={index}
-                 onClick={() => !nextRoundSaved && setModalOpen({open: true, type: 'select'})}
-                 style={{
-                   border: '2px dashed rgba(255,255,255,0.3)',
-                   background: 'rgba(255,255,255,0.05)',
-                   borderRadius: 20,
-                   padding: 24,
-                   cursor: nextRoundSaved ? 'not-allowed' : 'pointer',
-                   display: 'flex',
-                   flexDirection: 'column',
-                   alignItems: 'center',
-                   justifyContent: 'center',
-                   gap: 12,
-                   minHeight: 240,
-                   transition: 'all 0.3s ease',
-                   opacity: nextRoundSaved ? 0.5 : 1
-                 }}
-                 onMouseEnter={(e) => {
-                   if (nextRoundSaved) return;
-                   e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
-                   e.currentTarget.style.border = '2px dashed rgba(255,255,255,0.5)';
-                 }}
-                 onMouseLeave={(e) => {
-                   if (nextRoundSaved) return;
-                   e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
-                   e.currentTarget.style.border = '2px dashed rgba(255,255,255,0.3)';
-                 }}>
-                   <div style={{
-                    width: 56,
-                    height: 56,
-                     borderRadius: '50%',
-                     background: 'rgba(255,255,255,0.1)',
-                     display: 'flex',
-                     alignItems: 'center',
-                     justifyContent: 'center',
-                    fontSize: 22,
-                     color: 'white',
-                     border: '2px solid rgba(255,255,255,0.2)'
-                   }}>
-                     +
-                   </div>
-                   <div style={{
-                    fontSize: 14,
-                     fontWeight: 700,
-                     color: 'white',
-                     textAlign: 'center'
-                   }}>
-                     Add Card
-                   </div>
-                   <div style={{
-                    fontSize: 11,
-                     color: 'rgba(255,255,255,0.7)',
-                     textAlign: 'center'
-                   }}>
-                     Select from inventory
-                   </div>
-                 </div>
-               )
-             }
-            })}
-          </div>
-        
-        {/* Save Picks / Change Button */}
-        <div style={{
-          marginTop: 24,
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          gap: 12,
-          flexDirection: 'column'
-        }}>
-          {nextRoundSaved ? (
-            // Saved state - show "Change" button
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12
-            }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                background: 'rgba(16, 185, 129, 0.2)',
-                border: '2px solid rgba(16, 185, 129, 0.5)',
-                borderRadius: 12,
-                padding: '12px 24px',
-                color: '#86efac',
-                fontSize: 16,
-                fontWeight: 700
-              }}>
-                <span>✅</span>
-                <span>Picks Saved</span>
-              </div>
-              <button
-                onClick={enableEditing}
-                className="btn"
-                style={{
-                  background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                  border: '2px solid rgba(245, 158, 11, 0.5)',
-                  color: 'white',
-                  fontSize: 16,
-                  fontWeight: 700,
-                  padding: '14px 32px',
-                  borderRadius: 12,
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 14px rgba(245, 158, 11, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2)',
-                  transition: 'all 0.3s ease',
-                  textTransform: 'uppercase',
-                  letterSpacing: 1.2,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'linear-gradient(135deg, #d97706 0%, #b45309 100%)'
-                  e.currentTarget.style.transform = 'translateY(-2px)'
-                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(245, 158, 11, 0.5), 0 4px 12px rgba(0, 0, 0, 0.3)'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
-                  e.currentTarget.style.transform = 'translateY(0)'
-                  e.currentTarget.style.boxShadow = '0 4px 14px rgba(245, 158, 11, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2)'
-                }}
-              >
-                <span>✏️</span>
-                <span>Change</span>
-              </button>
+                      onMouseEnter={(e) => {
+                        if (nextRoundSaved) return;
+                        e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
+                        e.currentTarget.style.border = '2px dashed rgba(255,255,255,0.5)';
+                      }}
+                      onMouseLeave={(e) => {
+                        if (nextRoundSaved) return;
+                        e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+                        e.currentTarget.style.border = '2px dashed rgba(255,255,255,0.3)';
+                      }}
+                    >
+                      <div style={{
+                        width: 56,
+                        height: 56,
+                        borderRadius: '50%',
+                        background: 'rgba(255,255,255,0.1)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 22,
+                        color: 'white',
+                        border: '2px solid rgba(255,255,255,0.2)'
+                      }}>
+                        +
+                      </div>
+                      <div style={{fontSize: 14, fontWeight: 700, color: 'white', textAlign: 'center'}}>
+                        Add Card
+                      </div>
+                      <div style={{fontSize: 11, color: 'rgba(255,255,255,0.7)', textAlign: 'center'}}>
+                        Select from inventory
+                      </div>
+                    </div>
+                  )
+                }
+              })}
             </div>
-          ) : (
-            // Unsaved state - show "Save Picks" button
-            <>
-              <button
-                onClick={saveNextRoundPicks}
-                className="btn"
-                style={{
-                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                  border: '2px solid rgba(16, 185, 129, 0.5)',
-                  color: 'white',
-                  fontSize: 16,
-                  fontWeight: 700,
-                  padding: '14px 32px',
-                  borderRadius: 12,
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2)',
-                  transition: 'all 0.3s ease',
-                  textTransform: 'uppercase',
-                  letterSpacing: 1.2,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'linear-gradient(135deg, #059669 0%, #047857 100%)'
-                  e.currentTarget.style.transform = 'translateY(-2px)'
-                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(16, 185, 129, 0.5), 0 4px 12px rgba(0, 0, 0, 0.3)'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
-                  e.currentTarget.style.transform = 'translateY(0)'
-                  e.currentTarget.style.boxShadow = '0 4px 14px rgba(16, 185, 129, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2)'
-                }}
-              >
-                <span>💾</span>
-                <span>Save Picks</span>
-              </button>
-              <div style={{
-                fontSize: 12,
-                color: 'rgba(255, 255, 255, 0.7)',
-                fontStyle: 'italic'
-              }}>
-                Click to save your selections
-              </div>
-            </>
-          )}
-        </div>
-      </div>
+            
+            {/* Save Picks / Change Button */}
+            <div style={{
+              marginTop: 24,
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              gap: 12,
+              flexDirection: 'column'
+            }}>
+              {nextRoundSaved ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    background: 'rgba(16, 185, 129, 0.2)',
+                    border: '2px solid rgba(16, 185, 129, 0.5)',
+                    borderRadius: 12, padding: '12px 24px',
+                    color: '#86efac', fontSize: 16, fontWeight: 700
+                  }}>
+                    <span>✅</span><span>Picks Saved</span>
+                  </div>
+                  <button onClick={enableEditing} className="btn" style={{
+                    background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                    border: '2px solid rgba(245, 158, 11, 0.5)',
+                    color: 'white', fontSize: 16, fontWeight: 700,
+                    padding: '14px 32px', borderRadius: 12, cursor: 'pointer',
+                    boxShadow: '0 4px 14px rgba(245, 158, 11, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2)',
+                    transition: 'all 0.3s ease', textTransform: 'uppercase', letterSpacing: 1.2,
+                    display: 'flex', alignItems: 'center', gap: 8
+                  }}>
+                    <span>✏️</span><span>Change</span>
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <button onClick={saveNextRoundPicks} className="btn" style={{
+                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                    border: '2px solid rgba(16, 185, 129, 0.5)',
+                    color: 'white', fontSize: 16, fontWeight: 700,
+                    padding: '14px 32px', borderRadius: 12, cursor: 'pointer',
+                    boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2)',
+                    transition: 'all 0.3s ease', textTransform: 'uppercase', letterSpacing: 1.2,
+                    display: 'flex', alignItems: 'center', gap: 8
+                  }}>
+                    <span>💾</span><span>Save Picks</span>
+                  </button>
+                  <div style={{ fontSize: 12, color: 'rgba(255, 255, 255, 0.7)', fontStyle: 'italic' }}>
+                    Click to save your selections
+                  </div>
+                </>
+              )}
+            </div>
+          </>
+        )}
+        {/* --- FİNALIZING KONTROLÜ BİTİŞİ (NEXT ROUND) --- */}
+      </div>        
 
       {/* Recent Rounds */}
       <div className="panel">
