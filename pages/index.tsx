@@ -1520,7 +1520,7 @@ const activeRoundDisplay = currentRound
         </div>
 
         <div style={{display:'flex', flexDirection:'column', gap:16}}>
-      {/* Active Round */}
+{/* Active Round Panel */}
       <div className="panel">
         <div className="row" style={{alignItems:'center', gap:12}}>
           <h2 style={{
@@ -1550,16 +1550,18 @@ const activeRoundDisplay = currentRound
               Boost ends in: {formatRemaining(boost.endAt! - now)}
             </span>
           )}
-          </div>
+        </div>
         <div className="sep"></div>
-{/* --- YENİ KOD BAŞLANGICI --- */}
+
+        {/* CONDITIONAL CONTENT: FINALIZING OR CARDS */}
         {isFinalizingWindow ? (
+          // --- FINALIZING GÖRÜNÜMÜ ---
           <div style={{
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            minHeight: '300px',
+            minHeight: '250px',
             background: 'rgba(0,0,0,0.2)',
             borderRadius: 16,
             border: '2px dashed rgba(255,255,255,0.1)',
@@ -1576,6 +1578,7 @@ const activeRoundDisplay = currentRound
             </p>
           </div>
         ) : (
+          // --- NORMAL KART GÖRÜNÜMÜ ---
           <div className="picks" style={{display:'grid', gridTemplateColumns:'repeat(5, minmax(160px, 1fr))', gap:14}}>
               {active.map((p, index) => {
                 const tok = getTokenById(p.tokenId) || TOKENS[0]
@@ -1769,7 +1772,9 @@ const activeRoundDisplay = currentRound
                 </div>
               )
             })}
+          </div>
         )}
+      </div>
         {/* --- YENİ KOD BİTİŞİ --- */}
         {/* Next Round */}
 {/* Next Round Panel */}
