@@ -1769,7 +1769,6 @@ const activeRoundDisplay = currentRound
                 </div>
               )
             })}
-          </div>
         )}
         {/* --- YENİ KOD BİTİŞİ --- */}
         {/* Next Round */}
