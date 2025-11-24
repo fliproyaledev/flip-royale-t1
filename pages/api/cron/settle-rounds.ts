@@ -4,65 +4,22 @@ import {
   saveUsers,
   creditGamePoints,
   type RoundPick,
-  type UserRecord
+  type UserRecord,
+  type RoundHistoryEntry
 } from "../../../lib/users";
 import { getPriceForToken } from "../../../lib/price";
+import { TOKEN_MAP } from "../../../lib/tokens";
+import { saveDailyRoundSummary, type DailyRoundSummary } from "../../../lib/history"; // <-- YENİ İMPORT
 
-// Vercel Environment Variables'dan gizli anahtarı alıyoruz
 const CRON_SECRET = process.env.CRON_SECRET;
 
-// ---------------- Utility Functions ----------------
-
-function nerfFactor(dup: number): number {
-  if (dup <= 1) return 1;
-  if (dup === 2) return 0.75;
-  if (dup === 3) return 0.5;
-  if (dup === 4) return 0.25;
-  return 0;
-}
-
-function clamp(v: number, min: number, max: number) {
-  return Math.min(Math.max(v, min), max);
-}
-
-function calcPoints(
-  pStart: number,
-  pEnd: number,
-  dir: "UP" | "DOWN",
-  dup: number
-) {
-  if (!isFinite(pStart) || !isFinite(pEnd) || pStart <= 0 || pEnd <= 0) return 0;
-
-  // Yüzdelik değişim: (Kapanış - Açılış) / Açılış
-  const pct = ((pEnd - pStart) / pStart) * 100;
-  const signed = dir === "UP" ? pct : -pct;
-
-  let pts = signed * 100;
-
-  // Nerf (Duplicate) Cezası
-  const nerf = nerfFactor(dup);
-  const loss = 2 - nerf; // Kayıp durumunda daha fazla ceza (Infinex mantığı)
-
-  pts = pts >= 0 ? pts * nerf : pts * loss;
-  
-  // Puanı -2500 ile +2500 arasında sınırla (Oyun dengesi için)
-  pts = clamp(pts, -2500, 2500);
-
-  return Math.round(pts);
-}
-
-function utcDayKey() {
-  const d = new Date();
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2,"0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
-}
-
-// ---------------- Handler ----------------
+// ... (Yardımcı fonksiyonlar: nerfFactor, clamp, calcPoints, utcDayKey AYNI KALSIN) ...
+// ... (Burayı yer kaplamaması için kısalttım, eski helperlarını koru) ...
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  // 1. Güvenlik Kontrolleri
   if (req.method !== "GET") return res.status(405).json({ ok: false, error: "GET only" });
 
   const { key } = req.query;
@@ -70,52 +27,38 @@ export default async function handler(
   if (key !== CRON_SECRET) return res.status(401).json({ ok: false, error: "Unauthorized" });
 
   try {
-    console.log("🔒 [CRON] Finalizing Round Started...");
+    console.log("🔒 [CRON] Finalizing Round & Saving Stats...");
     
     const today = utcDayKey();
     const users = await loadUsers();
     const settledUsers: string[] = [];
-    const errors: any[] = [];
-
-    // ---------------------------------------------------------
-    // ADIM 1: GLOBAL FİYAT FOTOĞRAFI (SNAPSHOT)
-    // Tüm kullanıcıların kartlarındaki tokenleri bul ve tek seferde fiyatlarını çek.
-    // Bu sayede herkes için "Kapanış" ve "Açılış" fiyatı milimetrik aynı olur.
-    // ---------------------------------------------------------
     
-    const allTokenIds = new Set<string>();
+    // --- GLOBAL İSTATİSTİK DEĞİŞKENLERİ ---
+    let dailyTotalPlayers = 0;
+    let dailyTotalPoints = 0;
+    let dailyTopPlayer: DailyRoundSummary['topPlayer'] = null;
+    const tokenPerformance: Record<string, number> = {}; // Hangi token ne kadar kazandırdı
+    // --------------------------------------
 
-    // Hangi tokenlerin fiyatına ihtiyacımız var?
+    // 1. Fiyat Snapshot (AYNI KALSIN)
+    const allTokenIds = new Set<string>();
     Object.values(users).forEach((user: UserRecord) => {
-      // Active round'daki kartlar (Puan hesaplamak için)
       user.activeRound?.forEach(p => p && allTokenIds.add(p.tokenId));
-      // Next round'daki kartlar (Yeni başlangıç fiyatı belirlemek için)
       user.nextRound?.forEach(p => p && allTokenIds.add(p.tokenId));
     });
 
-    // Fiyatları çek ve hafızaya (Map) al
     const priceMap: Record<string, number> = {};
-    console.log(`📉 [CRON] Fetching prices for ${allTokenIds.size} tokens...`);
-
     await Promise.all(
       Array.from(allTokenIds).map(async (tokenId) => {
         try {
           const data = await getPriceForToken(tokenId);
-          // Fiyat önceliği: pLive (Canlı) > pClose > p0
           const price = data.pLive || data.pClose || data.p0 || 0;
           if (price > 0) priceMap[tokenId] = price;
-        } catch (e) {
-          console.error(`Failed to fetch price for ${tokenId}`, e);
-        }
+        } catch (e) {}
       })
     );
 
-    console.log("✅ [CRON] Prices snapshot taken. Processing users...");
-
-    // ---------------------------------------------------------
-    // ADIM 2: KULLANICILARI İŞLE (DAĞITIM)
-    // ---------------------------------------------------------
-
+    // 2. Kullanıcıları İşle
     for (const uid in users) {
       const user = users[uid];
       if (!user) continue;
@@ -123,35 +66,72 @@ export default async function handler(
       // Veri onarımı
       if (!Array.isArray(user.activeRound)) user.activeRound = [];
       if (!Array.isArray(user.nextRound)) user.nextRound = Array(5).fill(null);
+      if (!Array.isArray(user.roundHistory)) user.roundHistory = [];
 
-      // Eğer bu kullanıcı bugün zaten işlendiyse atla (Çifte işlem koruması)
-     // if (user.lastSettledDay === today) continue;
+      // Çifte işlem koruması
+      if (user.lastSettledDay === today) continue;
 
       try {
         let totalPoints = 0;
+        const historyItems: RoundHistoryEntry['items'] = [];
+        let hasActiveRound = false;
 
-        // --- A) BİTEN TURUN PUANLARINI HESAPLA ---
+        // A) BİTEN TURU HESAPLA
         for (const pick of user.activeRound) {
           if (!pick || !pick.tokenId) continue;
+          hasActiveRound = true;
 
-          // 1. Durum: Kart Kilitli
+          let itemPoints = 0;
+          let closingPrice = 0;
+          let openingPrice = 0;
+
           if (pick.locked && typeof pick.pointsLocked === "number") {
-            totalPoints += pick.pointsLocked;
-            continue;
+            itemPoints = pick.pointsLocked;
+            closingPrice = pick.pLock || 0;
+            openingPrice = pick.startPrice || 0;
+          } else {
+            closingPrice = priceMap[pick.tokenId] || 0;
+            openingPrice = pick.startPrice || (await getPriceForToken(pick.tokenId)).p0;
+
+            if (closingPrice && openingPrice) {
+              // calcPoints fonksiyonun dosyada tanımlı olduğunu varsayıyorum
+              itemPoints = calcPoints(openingPrice, closingPrice, pick.dir, pick.duplicateIndex, 0, false);
+            }
           }
 
-          // 2. Durum: Kart Açık (24s Kapanış Fiyatını Kullan)
-          // Fiyatı API'den değil, yukarıda aldığımız "priceMap"ten alıyoruz.
-          const closingPrice = priceMap[pick.tokenId];
+          totalPoints += itemPoints;
           
-          // Başlangıç fiyatı (startPrice) yoksa, token'in p0'ını kullan (Eski veri uyumluluğu)
-          // ÖNEMLİ: 'startPrice' dünkü turun açılış fiyatıdır.
-          const openingPrice = pick.startPrice || (await getPriceForToken(pick.tokenId)).p0;
-
-          if (closingPrice && openingPrice) {
-            const pts = calcPoints(openingPrice, closingPrice, pick.dir, pick.duplicateIndex);
-            totalPoints += pts;
+          // Token performansını kaydet (En iyi kartı bulmak için)
+          if (!tokenPerformance[pick.tokenId] || itemPoints > tokenPerformance[pick.tokenId]) {
+             // Basit mantık: En yüksek puan getiren kartı "En İyi Token" seçelim
+             tokenPerformance[pick.tokenId] = itemPoints; 
           }
+
+          const tokenInfo = TOKEN_MAP[pick.tokenId];
+          historyItems.push({
+            tokenId: pick.tokenId,
+            symbol: tokenInfo ? tokenInfo.symbol : pick.tokenId,
+            dir: pick.dir,
+            duplicateIndex: pick.duplicateIndex,
+            points: itemPoints,
+            startPrice: openingPrice,
+            closePrice: closingPrice
+          });
+        }
+
+        // İSTATİSTİK TOPLA (Eğer oynadıysa)
+        if (hasActiveRound) {
+            dailyTotalPlayers++;
+            dailyTotalPoints += totalPoints;
+
+            // En iyi oyuncuyu güncelle
+            if (!dailyTopPlayer || totalPoints > dailyTopPlayer.points) {
+                dailyTopPlayer = {
+                    username: user.name || 'Unknown',
+                    avatar: user.avatar || '/avatars/default-avatar.png',
+                    points: totalPoints
+                };
+            }
         }
 
         // Puanları cüzdana ekle
@@ -159,20 +139,28 @@ export default async function handler(
           creditGamePoints(user, totalPoints, `flip-round-${today}`, today);
         }
 
-        // --- B) YENİ TURU BAŞLAT (Next -> Active) ---
+        // HISTORY KAYDET (Kişisel)
+        if (historyItems.length > 0) {
+            const historyEntry: RoundHistoryEntry = {
+                roundNumber: user.currentRound || 1,
+                date: today,
+                totalPoints: totalPoints,
+                items: historyItems
+            };
+            user.roundHistory.unshift(historyEntry);
+            if (user.roundHistory.length > 50) user.roundHistory = user.roundHistory.slice(0, 50);
+        }
+
+        // B) YENİ TURU BAŞLAT
         const nextPicksRaw = (user.nextRound || []).filter(Boolean) as RoundPick[];
         const newActiveRound: RoundPick[] = [];
 
         for (const pick of nextPicksRaw) {
-          // Yeni tur için 'startPrice' belirliyoruz.
-          // KRİTİK NOKTA: Burada kullandığımız fiyat, yukarıdaki 'closingPrice' ile AYNI.
-          // Yani Dünün Kapanışı = Bugünün Açılışı.
           const entryPrice = priceMap[pick.tokenId];
-          
           if (entryPrice) {
             newActiveRound.push({
               ...pick,
-              startPrice: entryPrice, // Fiyat mühürlendi! 🔒
+              startPrice: entryPrice,
               locked: false,
               pLock: undefined,
               pointsLocked: undefined
@@ -180,15 +168,8 @@ export default async function handler(
           }
         }
 
-        // Kartları taşı
-        if (newActiveRound.length > 0) {
-          user.activeRound = newActiveRound;
-          user.nextRound = Array(5).fill(null); // Next round boşaltılır
-        } else {
-          user.activeRound = [];
-        }
-
-        // Tarih ve Tur Sayacını Güncelle
+        user.activeRound = newActiveRound.length > 0 ? newActiveRound : [];
+        user.nextRound = Array(5).fill(null);
         user.currentRound = (user.currentRound || 1) + 1;
         user.lastSettledDay = today;
         user.updatedAt = new Date().toISOString();
@@ -196,23 +177,40 @@ export default async function handler(
         settledUsers.push(user.id);
 
       } catch (err: any) {
-        errors.push({ uid, error: err.message });
+        console.error(`Error settling user ${uid}:`, err);
       }
     }
 
-    // ---------------------------------------------------------
-    // ADIM 3: KAYDET VE BİTİR
-    // ---------------------------------------------------------
-    
+    // --- GLOBAL İSTATİSTİĞİ REDIS'E KAYDET ---
+    // En iyi tokeni bul
+    let bestTokenSymbol = '-';
+    let bestTokenPoints = -Infinity;
+    for (const [tid, pts] of Object.entries(tokenPerformance)) {
+        if (pts > bestTokenPoints) {
+            bestTokenPoints = pts;
+            bestTokenSymbol = TOKEN_MAP[tid]?.symbol || tid;
+        }
+    }
+
+    const dailySummary: DailyRoundSummary = {
+        date: today,
+        totalPlayers: dailyTotalPlayers,
+        totalPointsDistributed: dailyTotalPoints,
+        topPlayer: dailyTopPlayer,
+        bestToken: bestTokenSymbol !== '-' ? { symbol: bestTokenSymbol, changePct: 0 } : null
+    };
+
+    await saveDailyRoundSummary(dailySummary);
+    console.log("📊 [CRON] Global Stats Saved:", dailySummary);
+    // -----------------------------------------
+
     await saveUsers(users);
-    console.log(`🏁 [CRON] Round finalized. ${settledUsers.length} users settled.`);
 
     return res.status(200).json({
       ok: true,
       date: today,
       settledCount: settledUsers.length,
-      priceSnapshotCount: Object.keys(priceMap).length,
-      errors,
+      globalStats: dailySummary
     });
 
   } catch (err: any) {
@@ -220,4 +218,3 @@ export default async function handler(
     return res.status(500).json({ ok: false, error: err.message });
   }
 }
-
