@@ -907,9 +907,9 @@ a {
 }
 
 /* Leaderboard Table */
+/* Sadece 3 sütun: Rank(70px) - Player(Esnek) - Points(150px) */
 .leaderboard-header {
-  display: grid;
-  grid-template-columns: 70px 2fr 1fr 1fr 1fr;
+  grid-template-columns: 70px 1fr 150px; 
   padding: 12px 16px;
   background: var(--table-header-bg);
   border-radius: 12px 12px 0 0;
@@ -925,7 +925,8 @@ a {
 
 .leaderboard-row {
   display: grid;
-  grid-template-columns: 70px 2fr 1fr 1fr 1fr;
+  /* Sadece 3 sütun: Rank(70px) - Player(Esnek) - Points(150px) */
+  grid-template-columns: 70px 1fr 150px; 
   padding: 16px;
   border-bottom: 1px solid var(--border);
   align-items: center;
