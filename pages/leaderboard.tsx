@@ -1,387 +1,290 @@
-import { useEffect, useMemo, useState } from 'react'
-import ThemeToggle from '../components/ThemeToggle'
+import { useState, useEffect, useMemo } from 'react'
+import { useTheme } from '../lib/theme'
+
+// TYPES
+type LeaderboardEntry = {
+  rank: number
+  userId: string
+  username: string
+  avatar: string
+  totalPoints: number
+  bankPoints: number
+  activeCards: number
+  isCurrentUser?: boolean
+}
+
+type HistoryEntry = {
+  date: string
+  totalPlayers: number
+  totalPointsDistributed: number
+  topPlayer: {
+    username: string
+    avatar: string
+    points: number
+  } | null
+  bestToken: {
+    symbol: string
+  } | null
+}
 
 const DEFAULT_AVATAR = '/avatars/default-avatar.png'
 
-type LeaderboardEntry = {
-  rank: number
-  id: string
-  name: string
-  totalPoints: number
-  roundsPlayed: number
-  bestRound: number
-  isCurrentUser: boolean
-  avatar?: string
-}
-
-export default function Leaderboard(){
-  const [timeUntilReset, setTimeUntilReset] = useState('')
-  const [mounted, setMounted] = useState(false)
-  const [user, setUser] = useState<any>(null)
-  const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([])
+export default function LeaderboardPage() {
+  const { theme } = useTheme()
+  
+  // TABS: 'current' | 'history'
+  const [activeTab, setActiveTab] = useState<'current' | 'history'>('current')
+  
+  // DATA STATES
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
+  const [historyData, setHistoryData] = useState<HistoryEntry[]>([])
   const [loading, setLoading] = useState(true)
+  const [currentUser, setCurrentUser] = useState<LeaderboardEntry | null>(null)
+  const [timeframe, setTimeframe] = useState<'all' | 'daily'>('all')
 
+  // --- FETCH CURRENT LEADERBOARD ---
   useEffect(() => {
-    setMounted(true)
+    if (activeTab !== 'current') return
     
-    async function load() {
-        const savedUser = localStorage.getItem('flipflop-user')
-        let userId = ''
-        if (savedUser) {
-            try { userId = JSON.parse(savedUser).id } catch {}
-        }
-        
-        if (userId) {
-            try {
-                const r = await fetch(`/api/users/me?userId=${encodeURIComponent(userId)}`)
-                const j = await r.json()
-                if (j.ok && j.user) {
-                    setUser(j.user)
-                }
-            } catch(e) { console.error(e) }
-        }
-        loadLeaderboard()
-    }
-    load()
-  }, [])
-
-  async function loadLeaderboard() {
-    try {
+    async function fetchLeaderboard() {
       setLoading(true)
-      const r = await fetch('/api/leaderboard')
-      const j = await r.json()
-      if (j?.ok && Array.isArray(j.users)) {
-        const entries: LeaderboardEntry[] = j.users.map((u: any, idx: number) => ({
-          rank: idx + 1,
-          id: u.id,
-          name: u.name || u.id,
-          totalPoints: u.totalPoints || 0,
-          roundsPlayed: u.roundsPlayed || 0,
-          bestRound: u.bestRound || 0,
-          isCurrentUser: user && u.id === user.id,
-          avatar: u.avatar || DEFAULT_AVATAR
+      try {
+        // MOCK DATA (Test için - Gerçek API'niz varsa açın)
+        // const res = await fetch(`/api/leaderboard?timeframe=${timeframe}`)
+        // ...
+        
+        const mockData: LeaderboardEntry[] = Array.from({ length: 50 }, (_, i) => ({
+          rank: i + 1,
+          userId: `user-${i}`,
+          username: `Player ${i + 1}`,
+          avatar: `/avatars/avatar-${(i % 8) + 1}.png`,
+          totalPoints: Math.round(100000 - i * 1500 + Math.random() * 500),
+          bankPoints: Math.round(50000 - i * 500),
+          activeCards: Math.floor(Math.random() * 5)
         }))
-        setLeaderboardData(entries)
-      }
-    } catch (err) {
-      console.error('Failed to load leaderboard:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
+        
+        // Current User
+        let myId = ''
+        try {
+            const saved = localStorage.getItem('flipflop-user')
+            if(saved) myId = JSON.parse(saved).id
+        } catch {}
 
-  // Reload when user changes
+        const myEntry = mockData.find(u => u.userId === myId)
+        if (myEntry) {
+            myEntry.isCurrentUser = true
+            setCurrentUser(myEntry)
+        }
+
+        setLeaderboard(mockData)
+      } catch (error) {
+        console.error('Failed to fetch leaderboard:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchLeaderboard()
+  }, [timeframe, activeTab])
+
+  // --- FETCH HISTORY ---
   useEffect(() => {
-    if (mounted && user) {
-      loadLeaderboard()
-    }
-  }, [user, mounted])
+    if (activeTab !== 'history') return
 
-  const leaderboard = useMemo(() => {
-    return leaderboardData.map((entry, idx) => ({
-      ...entry,
-      rank: idx + 1,
-      isCurrentUser: user && entry.id === user.id
-    }))
-  }, [leaderboardData, user])
-
-  useEffect(()=>{
-    function updateTimer(){
-      // Calculate time until next Monday 00:00 UTC
-      const now = new Date()
-      const daysUntilMonday = (8 - now.getUTCDay()) % 7
-      const nextMonday = new Date(now)
-      nextMonday.setUTCDate(now.getUTCDate() + daysUntilMonday)
-      nextMonday.setUTCHours(0, 0, 0, 0)
-      
-      const diff = nextMonday.getTime() - now.getTime()
-      const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
-      
-      setTimeUntilReset(`${days}d ${hours}h ${minutes}m`)
-    }
-    
-    updateTimer()
-    const interval = setInterval(updateTimer, 60000) // Update every minute
-    return () => clearInterval(interval)
-  },[])
-
-  function getRankIcon(rank: number): string {
-    switch(rank) {
-      case 1: return '🥇'
-      case 2: return '🥈'
-      case 3: return '🥉'
-      default: return `#${rank}`
-    }
-  }
-
-  function getRowStyle(entry: LeaderboardEntry) {
-    const baseStyle = {
-      padding: '16px 20px',
-      borderBottom: '1px solid rgba(255,255,255,.08)',
-      display: 'grid',
-      gridTemplateColumns: '80px 1fr 120px 120px 120px 80px',
-      alignItems: 'center',
-      gap: 16,
-      transition: 'background-color 0.2s'
-    }
-
-    if (entry.rank <= 3) {
-      return {
-        ...baseStyle,
-        background: entry.rank === 1 ? 'linear-gradient(90deg, rgba(255,215,0,.1), rgba(255,215,0,.05))' :
-                   entry.rank === 2 ? 'linear-gradient(90deg, rgba(192,192,192,.1), rgba(192,192,192,.05))' :
-                   'linear-gradient(90deg, rgba(205,127,50,.1), rgba(205,127,50,.05))',
-        borderLeft: `4px solid ${
-          entry.rank === 1 ? '#ffd700' : 
-          entry.rank === 2 ? '#c0c0c0' : 
-          '#cd7f32'
-        }`
+    async function fetchHistory() {
+      setLoading(true)
+      try {
+        const res = await fetch('/api/leaderboard/history')
+        const data = await res.json()
+        if (data.ok && Array.isArray(data.history)) {
+            setHistoryData(data.history)
+        }
+      } catch (error) {
+        console.error('Failed to fetch history:', error)
+      } finally {
+        setLoading(false)
       }
     }
+    fetchHistory()
+  }, [activeTab])
 
-    if (entry.isCurrentUser) {
-      return {
-        ...baseStyle,
-        background: 'rgba(0,207,163,.1)',
-        borderLeft: '4px solid #00cfa3'
-      }
-    }
+  const topThree = useMemo(() => leaderboard.slice(0, 3), [leaderboard])
+  const restOfLeaderboard = useMemo(() => leaderboard.slice(3), [leaderboard])
 
-    return baseStyle
+  // Rank Styles Helper
+  const getRankStyle = (rank: number) => {
+    if (rank === 1) return { color: theme === 'light' ? '#d97706' : '#fbbf24', emoji: '🥇', className: 'rank-1' }
+    if (rank === 2) return { color: theme === 'light' ? '#94a3b8' : '#e2e8f0', emoji: '🥈', className: 'rank-2' }
+    if (rank === 3) return { color: theme === 'light' ? '#b45309' : '#d97706', emoji: '🥉', className: 'rank-3' }
+    return { color: 'inherit', emoji: `#${rank}`, className: '' }
   }
 
   return (
     <div className="app">
       <header className="topbar">
-        <div className="brand">
-          <img src="/logo.png" alt="FLIP ROYALE" className="logo" onError={(e) => {
-            const target = e.currentTarget as HTMLImageElement
-            target.src = '/logo.svg'
-            target.onerror = () => {
-              target.style.display = 'none'
-              const parent = target.parentElement
-              if (parent) parent.innerHTML = '<span class="dot"></span> FLIP ROYALE'
-            }
-          }} />
-        </div>
-        <nav className="tabs">
-          <a className="tab" href="/">PLAY</a>
-          <a className="tab" href="/prices">PRICES</a>
-          <a className="tab" href="/arena">ARENA</a>
-          <a className="tab" href="/guide">GUIDE</a>
-          <a className="tab" href="/inventory">INVENTORY</a>
-          <a className="tab active" href="/leaderboard">LEADERBOARD</a>
-          <a className="tab" href="/history">HISTORY</a>
-          {user && <a className="tab" href="/profile">PROFILE</a>}
-        </nav>
-        <div style={{display: 'flex', alignItems: 'center', gap: 12, marginLeft: 'auto'}}>
-          <ThemeToggle />
-          <a 
-            href="https://x.com/fliproyale" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 48,
-              height: 48,
-              borderRadius: 12,
-              background: 'rgba(255,255,255,0.1)',
-              border: '1px solid rgba(255,255,255,0.2)',
-              color: 'white',
-              textDecoration: 'none',
-              transition: 'all 0.3s',
-              cursor: 'pointer',
-              backdropFilter: 'blur(10px)',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.15)'
-              e.currentTarget.style.transform = 'scale(1.05)'
-              e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.1)'
-              e.currentTarget.style.transform = 'scale(1)'
-              e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)'
-            }}
-            title="Follow us on X"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style={{display: 'block'}}>
-              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-            </svg>
-          </a>
-        </div>
+          <div className="brand">
+            <span style={{fontWeight: 900, fontSize: 24}}>LEADERBOARD</span>
+          </div>
+          <a href="/" className="btn ghost">← Back to Arena</a>
       </header>
 
-      <div className="panel">
-        <div className="row">
-          <h2>Weekly Leaderboard</h2>
-          <div style={{display:'flex',alignItems:'center',gap:12}}>
-            <span className="badge" style={{
-              background:'rgba(0,207,163,.2)',
-              borderColor:'rgba(0,207,163,.3)',
-              color:'#86efac',
-              fontSize:12
-            }}>
-              Weekly reset in: {mounted ? timeUntilReset : '...'}
-            </span>
-          </div>
-        </div>
-        <div className="sep"></div>
+      <div className="panel" style={{ maxWidth: 1000, margin: '0 auto' }}>
         
-        <div style={{
-          overflowX: 'auto',
-          borderRadius: 8,
-          border: '1px solid var(--border)',
-          background: 'rgba(0,0,0,.1)'
-        }}>
-          {/* Table Header */}
-          <div className="leaderboard-header" style={{
-            padding: '16px 20px',
-            background: 'rgba(0,0,0,.2)',
-            borderBottom: '1px solid var(--border)',
-            display: 'grid',
-            gridTemplateColumns: '80px 1fr 120px 120px 120px 80px',
-            alignItems: 'center',
-            gap: 16,
-            fontWeight: 700,
-            fontSize: 14,
-            color: 'var(--muted-inv)'
-          }}>
-            <div>Rank</div>
-            <div>Player</div>
-            <div>Total Points</div>
-            <div>Rounds</div>
-            <div>Best Round</div>
-            <div></div>
+        {/* HEADER & TABS */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 16 }}>
+          <div>
+            <h2 style={{ marginBottom: 8 }}>Rankings & History</h2>
+            <p className="muted">Compete for the top spot or check past winners.</p>
           </div>
           
-          {/* Table Rows */}
-          {loading ? (
-            <div style={{padding: 40, textAlign: 'center', color: 'var(--muted-inv)'}}>
-              Loading leaderboard...
-            </div>
-          ) : leaderboard.length === 0 ? (
-            <div style={{padding: 40, textAlign: 'center', color: 'var(--muted-inv)'}}>
-              No players yet. Be the first to earn points!
-            </div>
-          ) : (
-          leaderboard.map((entry) => (
-            <div key={entry.id} className="leaderboard-row" style={getRowStyle(entry)}>
-              <div style={{
-                fontSize: entry.rank <= 3 ? 20 : 16,
-                fontWeight: 900,
-                color: entry.rank <= 3 ? '#ffd700' : 'var(--text-inv)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8
-              }}>
-                {getRankIcon(entry.rank)}
-              </div>
-              
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                fontWeight: 600
-              }}>
-                <div style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: '50%',
-                  overflow: 'hidden',
-                  border: '2px solid rgba(255,255,255,0.15)',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.25)'
-                }}>
-                  <img
-                    src={entry.avatar || DEFAULT_AVATAR}
-                    alt={`${entry.name} avatar`}
-                    style={{width:'100%', height:'100%', objectFit:'cover'}}
-                    onError={(e)=>{ (e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR }}
-                  />
+          {/* MAIN TABS: Current vs History */}
+          <div style={{ display: 'flex', gap: 10 }}>
+             <button 
+               onClick={() => setActiveTab('current')}
+               className={`btn ${activeTab === 'current' ? 'primary' : 'ghost'}`}
+             >
+               Current Standings
+             </button>
+             <button 
+               onClick={() => setActiveTab('history')}
+               className={`btn ${activeTab === 'history' ? 'primary' : 'ghost'}`}
+             >
+               Past Rounds
+             </button>
+          </div>
+        </div>
+
+        {/* === TAB: CURRENT === */}
+        {activeTab === 'current' && (
+            <>
+                {/* Timeframe Filter */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 20 }}>
+                    <div style={{ display: 'flex', background: theme === 'light' ? '#f1f5f9' : 'rgba(255,255,255,0.1)', padding: 4, borderRadius: 12 }}>
+                        <button onClick={() => setTimeframe('all')} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: timeframe === 'all' ? (theme === 'light' ? 'white' : 'rgba(255,255,255,0.2)') : 'transparent', color: theme === 'light' ? (timeframe === 'all' ? '#0f172a' : '#64748b') : 'white', fontWeight: 700, cursor: 'pointer', boxShadow: timeframe === 'all' ? '0 2px 4px rgba(0,0,0,0.1)' : 'none' }}>All Time</button>
+                        <button onClick={() => setTimeframe('daily')} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: timeframe === 'daily' ? (theme === 'light' ? 'white' : 'rgba(255,255,255,0.2)') : 'transparent', color: theme === 'light' ? (timeframe === 'daily' ? '#0f172a' : '#64748b') : 'white', fontWeight: 700, cursor: 'pointer', boxShadow: timeframe === 'daily' ? '0 2px 4px rgba(0,0,0,0.1)' : 'none' }}>Today</button>
+                    </div>
                 </div>
-                <span style={{color: 'var(--text-inv)'}}>{entry.name}</span>
-                {entry.isCurrentUser && (
-                  <span className="badge" style={{
-                    background: 'rgba(0,207,163,.2)',
-                    borderColor: 'rgba(0,207,163,.3)',
-                    color: '#86efac',
-                    fontSize: 10,
-                    padding: '2px 6px'
-                  }}>
-                    you
-                  </span>
+
+                {/* Podium */}
+                {!loading && leaderboard.length > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-end', gap: 16, marginBottom: 40, flexWrap: 'wrap' }}>
+                    {topThree[1] && <PodiumCard entry={topThree[1]} theme={theme} getRankStyle={getRankStyle} style={{ order: 1, transform: 'scale(0.9)' }} />}
+                    {topThree[0] && <PodiumCard entry={topThree[0]} theme={theme} getRankStyle={getRankStyle} style={{ order: 2, zIndex: 2 }} isFirst />}
+                    {topThree[2] && <PodiumCard entry={topThree[2]} theme={theme} getRankStyle={getRankStyle} style={{ order: 3, transform: 'scale(0.9)' }} />}
+                </div>
                 )}
-              </div>
-              
-              <div style={{
-                fontWeight: 700,
-                color: entry.totalPoints >= 0 ? '#86efac' : '#fca5a5'
-              }}>
-                {entry.totalPoints >= 0 ? '+' : ''}{entry.totalPoints.toLocaleString()}
-              </div>
-              
-              <div style={{color: 'var(--muted-inv)', fontSize: 14}}>
-                {entry.roundsPlayed}
-              </div>
-              
-              <div style={{
-                fontWeight: 600,
-                color: entry.bestRound >= 0 ? '#86efac' : '#fca5a5',
-                fontSize: 14
-              }}>
-                {entry.bestRound >= 0 ? '+' : ''}{entry.bestRound}
-              </div>
-              
-              <div style={{textAlign: 'right'}}>
-                {entry.rank <= 3 && (
-                  <span style={{
-                    fontSize: 12,
-                    color: entry.rank === 1 ? '#ffd700' : 
-                           entry.rank === 2 ? '#c0c0c0' : '#cd7f32',
-                    fontWeight: 700
-                  }}>
-                    {entry.rank === 1 ? 'GOLD' : 
-                     entry.rank === 2 ? 'SILVER' : 'BRONZE'}
-                  </span>
+
+                {/* Current User Rank */}
+                {currentUser && !loading && (
+                <div style={{ background: theme === 'light' ? 'linear-gradient(135deg, #f0f9ff, #e0f2fe)' : 'linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(37, 99, 235, 0.1))', border: `1px solid ${theme === 'light' ? '#bae6fd' : 'rgba(59, 130, 246, 0.3)'}`, borderRadius: 16, padding: '12px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{ fontWeight: 900, fontSize: 18, color: theme === 'light' ? '#0284c7' : '#60a5fa' }}>#{currentUser.rank}</div>
+                        <img src={currentUser.avatar} alt="Me" style={{ width: 40, height: 40, borderRadius: '50%' }} onError={(e) => (e.currentTarget.src = DEFAULT_AVATAR)} />
+                        <div style={{ fontWeight: 700 }}>You ({currentUser.username})</div>
+                    </div>
+                    <div style={{ fontWeight: 800, fontSize: 18, color: theme === 'light' ? '#0284c7' : '#60a5fa' }}>{currentUser.totalPoints.toLocaleString()} pts</div>
+                </div>
                 )}
-              </div>
-            </div>
-          )))}
-        </div>
-        
-        <div style={{
-          marginTop: 20,
-          padding: '16px',
-          background: 'rgba(0,0,0,.1)',
-          borderRadius: 8,
-          border: '1px solid var(--border)'
-        }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-            marginBottom: 8
-          }}>
-            <div style={{
-              width: 12,
-              height: 12,
-              borderRadius: '50%',
-              background: '#00cfa3'
-            }}></div>
-            <span style={{fontSize: 14, color: 'var(--muted-inv)'}}>
-              Your current position: #{leaderboard.find(e => e.isCurrentUser)?.rank ?? '—'}
-            </span>
-          </div>
-          <div style={{fontSize: 12, color: 'var(--muted-inv)'}}>
-            Leaderboard resets every Monday at 00:00 UTC. Keep playing to climb the ranks!
-          </div>
-        </div>
+
+                {/* Table */}
+                <div style={{ overflowX: 'auto', borderRadius: 12, border: '1px solid var(--border)' }}>
+                <div className="leaderboard-header">
+                    <div>RANK</div><div>PLAYER</div><div style={{textAlign: 'right'}}>POINTS</div><div style={{textAlign: 'right'}}>BANK</div><div style={{textAlign: 'center'}}>CARDS</div>
+                </div>
+                {loading ? (
+                    <div style={{ padding: 40, textAlign: 'center' }} className="muted">Loading rankings...</div>
+                ) : (
+                    <div style={{ maxHeight: 500, overflowY: 'auto' }}>
+                    {restOfLeaderboard.map((entry) => {
+                        const rs = getRankStyle(entry.rank)
+                        return (
+                        <div key={entry.userId} className="leaderboard-row" style={{ background: entry.isCurrentUser ? (theme === 'light' ? '#f0f9ff' : 'rgba(59,130,246,0.1)') : undefined }}>
+                            <div style={{ fontWeight: 800, fontSize: 16 }} className={rs.className}>{entry.rank}</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                <img src={entry.avatar} alt={entry.username} style={{ width: 36, height: 36, borderRadius: '50%' }} onError={(e) => (e.currentTarget.src = DEFAULT_AVATAR)} />
+                                <span style={{ fontWeight: entry.isCurrentUser ? 700 : 600 }}>{entry.username}</span>
+                            </div>
+                            <div style={{ textAlign: 'right', fontWeight: 700 }}>{entry.totalPoints.toLocaleString()}</div>
+                            <div style={{ textAlign: 'right', fontSize: 13 }} className="muted">{entry.bankPoints.toLocaleString()}</div>
+                            <div style={{ textAlign: 'center' }}><span className="badge">{entry.activeCards}</span></div>
+                        </div>
+                        )
+                    })}
+                    </div>
+                )}
+                </div>
+            </>
+        )}
+
+        {/* === TAB: HISTORY === */}
+        {activeTab === 'history' && (
+             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {loading && <div style={{ padding: 40, textAlign: 'center' }} className="muted">Loading history...</div>}
+                {!loading && historyData.length === 0 && (
+                    <div style={{ padding: 40, textAlign: 'center', background: 'var(--card-2)', borderRadius: 12 }} className="muted">
+                        No round history available yet. Wait for the next settlement!
+                    </div>
+                )}
+                
+                {historyData.map((day) => (
+                    <div key={day.date} className="panel" style={{ padding: 0, overflow: 'hidden', marginBottom: 0 }}>
+                        <div style={{ padding: '16px 24px', background: theme === 'light' ? '#f8fafc' : 'rgba(255,255,255,0.03)', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ fontWeight: 800, fontSize: 18 }}>{day.date}</div>
+                            <div className="badge">{day.totalPlayers} Players</div>
+                        </div>
+                        <div style={{ padding: 24, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+                            {/* Winner Section */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                                <div style={{ fontSize: 32 }}>🏆</div>
+                                <div>
+                                    <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>TOP PLAYER</div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                        {day.topPlayer?.avatar && <img src={day.topPlayer.avatar} style={{ width: 28, height: 28, borderRadius: '50%' }} />}
+                                        <div style={{ fontWeight: 700, fontSize: 16 }}>{day.topPlayer?.username || 'None'}</div>
+                                    </div>
+                                    <div style={{ fontSize: 13, color: 'var(--accent-green)', fontWeight: 600 }}>
+                                        +{day.topPlayer?.points.toLocaleString()} pts
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Best Token Section */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 16, borderLeft: '1px solid var(--border)', paddingLeft: 24 }}>
+                                <div style={{ fontSize: 32 }}>🚀</div>
+                                <div>
+                                    <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>BEST TOKEN</div>
+                                    <div style={{ fontWeight: 800, fontSize: 18 }}>{day.bestToken?.symbol || '-'}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div style={{ padding: '12px 24px', background: theme === 'light' ? '#f1f5f9' : 'rgba(0,0,0,0.2)', borderTop: '1px solid var(--border)', fontSize: 12, textAlign: 'right', color: 'var(--muted)' }}>
+                            Total Distributed: <b>{day.totalPointsDistributed.toLocaleString()} pts</b>
+                        </div>
+                    </div>
+                ))}
+             </div>
+        )}
+
       </div>
     </div>
   )
+}
+
+// Sub-component
+function PodiumCard({ entry, theme, getRankStyle, style, isFirst }: any) {
+    const rs = getRankStyle(entry.rank)
+    return (
+        <div className="panel" style={{ 
+            display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 20, 
+            flex: isFirst ? '0 0 180px' : '0 0 150px',
+            border: isFirst ? `2px solid ${rs.color}` : undefined,
+            ...style 
+        }}>
+            <div style={{ fontSize: isFirst ? 32 : 24, marginBottom: 8 }}>{rs.emoji}</div>
+            <div style={{ width: isFirst ? 72 : 56, height: isFirst ? 72 : 56, borderRadius: '50%', overflow: 'hidden', marginBottom: 12, boxShadow: `0 4px 12px ${rs.color}40`, border: `2px solid ${rs.color}` }}>
+                <img src={entry.avatar} alt={entry.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => (e.currentTarget.src = DEFAULT_AVATAR)} />
+            </div>
+            <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4, textAlign: 'center' }}>{entry.username}</div>
+            <div style={{ fontWeight: 900, fontSize: 18, color: rs.color }}>{entry.totalPoints.toLocaleString()} pts</div>
+        </div>
+    )
 }
