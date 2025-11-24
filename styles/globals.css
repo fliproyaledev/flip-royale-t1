@@ -2,7 +2,10 @@
    GLOBAL CSS - FULL VERSION
    ========================================= */
 
-/* Theme Variables */
+/* =========================================
+   THEME VARIABLES (Bunu dosyanın en tepesine yapıştır)
+   ========================================= */
+
 :root {
   --bg-mint-1: #e0f7ed;
   --bg-mint-2: #c8f0df;
@@ -30,44 +33,54 @@
   --bg-overlay: rgba(0, 0, 0, 0.3);
 }
 
-/* Dark Mode (Default - Aynen Korundu) */
+/* Dark Mode (Aynen Korundu) */
 [data-theme="dark"] {
   --bg-overlay: rgba(0, 0, 0, 0.4);
-  --panel-bg: linear-gradient(180deg, rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.3));
-  --topbar-bg: linear-gradient(135deg, rgba(0, 0, 0, 0.25), rgba(0, 0, 0, 0.15));
+  --panel-bg: linear-gradient(180deg, rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.5));
+  --topbar-bg: linear-gradient(135deg, rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.3));
+  --border: #1a4d3a;
+  --text-inv: #ffffff;
+  --muted-inv: #bfead9;
+  --card: #0d1e18;
+  --card-2: #091612;
+  --card-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  --btn-bg: linear-gradient(180deg, rgba(16, 33, 27, 0.85), rgba(12, 26, 21, 0.7));
+  --badge-color: #86efac;
+  --badge-bg: rgba(0, 207, 163, 0.15);
+  --badge-border: rgba(0, 207, 163, 0.25);
+  --table-header-bg: rgba(255, 255, 255, 0.05);
+  --table-row-hover: rgba(255, 255, 255, 0.08);
 }
 
-/* Light Mode - PREMIUM OPTIMIZED */
+/* Light Mode - PREMIUM AYARLAR (Burayı komple değiştir) */
 [data-theme="light"] {
-  /* Arka plan resmini yumuşatan katman */
+  /* Arka planı yumuşatan katman */
   --bg-overlay: rgba(255, 255, 255, 0.75); 
 
-  /* Paneller: Göz yormayan kırık beyaz/mint */
+  /* Paneller: Kırık Beyaz/Mint */
   --panel-bg: linear-gradient(180deg, rgba(248, 252, 250, 0.95), rgba(240, 250, 245, 0.9));
   --topbar-bg: rgba(255, 255, 255, 0.95);
   
-  /* Kartlar: Beyaz ve temiz */
+  /* Kartlar: Beyaz */
   --card: #ffffff;
   --card-2: #f8fafc;
 
-  /* Kenarlıklar ve Gölgeler: Çok silik ve yumuşak */
+  /* Kenarlıklar ve Gölgeler: Çok silik */
   --border: rgba(6, 78, 59, 0.1);
   --card-shadow: 0 4px 20px rgba(0, 0, 0, 0.05), 0 1px 4px rgba(0, 0, 0, 0.02);
 
-  /* Metinler: Okunabilirlik için koyu yeşil/siyah */
+  /* Metinler: SİYAH/KOYU YEŞİL (Okunabilirlik için şart) */
   --text-inv: #022c22; 
   --muted-inv: #064e3b; 
   --text-primary: #022c22;
   --text-secondary: rgba(2, 44, 34, 0.9);
   --text-muted: rgba(6, 78, 59, 0.8);
 
-  /* Butonlar ve Badge'ler */
+  /* Butonlar */
   --btn-bg: #ffffff;
   --badge-color: #047857;
   --badge-bg: rgba(6, 78, 59, 0.08);
   --badge-border: transparent;
-
-  /* Tablolar */
   --table-header-bg: rgba(6, 78, 59, 0.05);
   --table-row-hover: rgba(6, 78, 59, 0.03);
 }
@@ -1003,4 +1016,62 @@ select option {
 @media (max-width: 480px) {
   .picks { grid-template-columns: 1fr !important; }
   .modal-grid { grid-template-columns: repeat(2, 1fr); }
+}
+/* =========================================
+   LIGHT MODE ZORUNLU DÜZELTMELER (Dosyanın EN ALTINA ekle)
+   ========================================= */
+
+[data-theme="light"] body {
+  background-image: url('/lightmode.png');
+  color: var(--text-inv) !important;
+}
+
+/* Light Mode'da tüm başlık ve yazıları koyu renk yapmaya zorla */
+[data-theme="light"] h1,
+[data-theme="light"] h2,
+[data-theme="light"] h3,
+[data-theme="light"] h4,
+[data-theme="light"] h5,
+[data-theme="light"] h6,
+[data-theme="light"] p,
+[data-theme="light"] span,
+[data-theme="light"] div,
+[data-theme="light"] strong,
+[data-theme="light"] b {
+  color: var(--text-inv);
+}
+
+/* Ama özel renkli (yeşil/kırmızı) classları bozma, onları geri yükle */
+[data-theme="light"] .points.good { color: #16a34a !important; }
+[data-theme="light"] .points.bad { color: #dc2626 !important; }
+[data-theme="light"] .badge { color: #047857 !important; }
+[data-theme="light"] .rank-1 { color: #d97706 !important; }
+[data-theme="light"] .rank-2 { color: #64748b !important; }
+[data-theme="light"] .rank-3 { color: #b45309 !important; }
+
+/* Butonların içindeki yazıların rengini koru (Örn: Beyaz üzerine koyu yazı) */
+[data-theme="light"] .btn {
+  background: #ffffff;
+  color: #022c22 !important;
+  border-color: rgba(6, 78, 59, 0.2);
+}
+[data-theme="light"] .btn:hover {
+  background: #f1f5f9;
+}
+[data-theme="light"] .btn.primary {
+  color: #ffffff !important; /* Primary buton yazısı beyaz kalsın */
+}
+
+/* Kartların içindeki beyaz borderları temizle */
+[data-theme="light"] .pick-card,
+[data-theme="light"] .inv-card,
+[data-theme="light"] .modal {
+  border-color: rgba(6, 78, 59, 0.1) !important;
+  background: #ffffff !important;
+}
+
+/* Profile sayfasındaki label'ları görünür yap */
+[data-theme="light"] .muted {
+  color: #064e3b !important;
+  opacity: 0.8;
 }
