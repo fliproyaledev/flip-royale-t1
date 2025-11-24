@@ -1018,70 +1018,69 @@ select option {
   .modal-grid { grid-template-columns: repeat(2, 1fr); }
 }
 /* =================================================================
-   LIGHT MODE ZORUNLU DÜZELTMESİ (DOSYANIN EN ALTINA YAPIŞTIR)
+   LIGHT MODE İÇİN ACİL GÖRÜNÜRLÜK YAMASI (KESİN ÇÖZÜM)
    ================================================================= */
 
-/* 1. Ana Gövde Rengi */
-[data-theme="light"] body {
-  color: #0f172a !important; /* Koyu Lacivert */
+/* 1. TÜM METİNLERİ ZORLA SİYAH YAP (Profile Sayfası Dahil) */
+[data-theme="light"] .panel div,
+[data-theme="light"] .panel span,
+[data-theme="light"] .panel p,
+[data-theme="light"] .panel h1,
+[data-theme="light"] .panel h2,
+[data-theme="light"] .panel h3,
+[data-theme="light"] .panel label,
+[data-theme="light"] .panel li {
+  color: #0f172a !important; /* Koyu Lacivert/Siyah */
+  opacity: 1 !important;      /* Saydamlığı iptal et */
+  text-shadow: none !important;
 }
 
-/* 2. Panellerin İçindeki Tüm Yazıları Koyulaştır */
-[data-theme="light"] .panel,
-[data-theme="light"] .modal,
-[data-theme="light"] .pick-card,
-[data-theme="light"] .inv-card {
-  background: #ffffff !important; /* Arka plan kesin beyaz */
-  border: 1px solid #cbd5e1 !important; /* Çerçeve belirgin gri */
-  color: #0f172a !important; /* Yazılar koyu */
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1) !important;
+/* 2. SOLUK YAZILARI (Member Since vb.) GÖRÜNÜR GRİ YAP */
+/* Normalde beyaz ve %50 opak olan yazıları düzeltir */
+[data-theme="light"] .muted,
+[data-theme="light"] div[style*="rgba(255,255,255"], 
+[data-theme="light"] span[style*="rgba(255,255,255"] {
+  color: #475569 !important; /* Okunabilir Gri */
+  opacity: 1 !important;
 }
 
-/* 3. Başlıklar ve Paragraflar (Görünmez olanlar) */
-[data-theme="light"] h1, 
-[data-theme="light"] h2, 
-[data-theme="light"] h3, 
-[data-theme="light"] h4, 
-[data-theme="light"] h5, 
-[data-theme="light"] p,
-[data-theme="light"] span,
-[data-theme="light"] div,
-[data-theme="light"] strong,
-[data-theme="light"] label {
-  /* Eğer özel bir renk sınıfı yoksa, rengi koyu yap */
-  color: inherit; 
+/* 3. SAĞ ÜSTTEKİ 'X' BUTONU VE İKONLAR */
+/* Buton içindeki SVG veya Yazıyı Siyah Yap */
+[data-theme="light"] button svg,
+[data-theme="light"] button span,
+[data-theme="light"] a svg {
+  fill: #0f172a !important;
+  color: #0f172a !important;
+  stroke: #0f172a !important;
 }
 
-/* 4. Profile Sayfası İstatistik Düzeltmesi */
-/* Profil sayfasındaki label'lar genellikle opacity: 0.7 ile beyazdır, onları düzeltiyoruz */
-[data-theme="light"] .panel div {
-    color: #0f172a;
-}
-[data-theme="light"] .panel .muted {
-    color: #64748b !important; /* Gri metinler */
-    opacity: 1 !important;
-}
+/* 4. İSTİSNALAR (Bunların Rengi Bozulmasın) */
 
-/* 5. İSTİSNALAR (Bozulmaması Gereken Renkli Alanlar) */
-/* Yeşil/Kırmızı Puanlar, Butonlar ve Rozetler etkilenmemeli */
+/* Primary Buton (Örn: Change Photo) Yazısı Beyaz Kalsın */
 [data-theme="light"] .btn.primary,
-[data-theme="light"] .badge,
+[data-theme="light"] .btn.primary span {
+  color: #ffffff !important;
+}
+
+/* Kırmızı Butonlar (Logout vb.) Kırmızı Kalsın */
+[data-theme="light"] .btn[style*="rgba(239,68,68"] {
+   color: #dc2626 !important;
+}
+
+/* Yeşil/Kırmızı Puanlar ve Rozetler */
 [data-theme="light"] .points.good,
+[data-theme="light"] .badge,
+[data-theme="light"] .dir-up {
+    color: #16a34a !important;
+}
 [data-theme="light"] .points.bad,
-[data-theme="light"] .dir-up,
 [data-theme="light"] .dir-down {
-    color: revert !important; /* Kendi orijinal rengine dön */
+    color: #dc2626 !important;
 }
 
-/* Primary Button Yazısı Beyaz Kalmalı */
-[data-theme="light"] .btn.primary {
-    color: #ffffff !important;
-}
-
-/* Input ve Select Kutuları */
-[data-theme="light"] input, 
-[data-theme="light"] select {
-    background: #f1f5f9 !important;
-    color: #0f172a !important;
-    border: 1px solid #cbd5e1 !important;
+/* Logo Rengini Bozma */
+[data-theme="light"] .brand svg,
+[data-theme="light"] .brand svg path {
+  fill: initial !important;
+  stroke: initial !important;
 }
