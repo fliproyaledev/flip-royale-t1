@@ -82,8 +82,8 @@ export default function Profile(){
     if (!file || !user) return
 
     // Basit boyut kontrolü (Örn: 2MB)
-    if (file.size > 2 * 1024 * 1024) {
-        alert("File is too large. Please choose an image under 2MB.")
+    if (file.size > 1 * 512 * 512) {
+        alert("File is too large. Please choose an image under 512kb.")
         return
     }
 
