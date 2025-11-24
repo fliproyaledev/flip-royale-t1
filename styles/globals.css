@@ -1,3 +1,7 @@
+/* =========================================
+   GLOBAL CSS - FULL VERSION
+   ========================================= */
+
 /* Theme Variables */
 :root {
   --bg-mint-1: #e0f7ed;
@@ -33,30 +37,39 @@
   --topbar-bg: linear-gradient(135deg, rgba(0, 0, 0, 0.25), rgba(0, 0, 0, 0.15));
 }
 
-/* Light Mode - GÖZ DOSTU OPTİMİZASYON */
+/* Light Mode - PREMIUM OPTIMIZED */
 [data-theme="light"] {
-  /* Arka plan resmini biraz daha 'dumanlı' beyaz yaparak yumuşat */
-  --bg-overlay: rgba(255, 255, 255, 0.65);
+  /* Arka plan resmini yumuşatan katman */
+  --bg-overlay: rgba(255, 255, 255, 0.75); 
+
+  /* Paneller: Göz yormayan kırık beyaz/mint */
+  --panel-bg: linear-gradient(180deg, rgba(248, 252, 250, 0.95), rgba(240, 250, 245, 0.9));
+  --topbar-bg: rgba(255, 255, 255, 0.95);
   
-  /* Paneller: Saf beyaz yerine çok hafif yeşilimsi kırık beyaz */
-  --panel-bg: linear-gradient(180deg, rgba(241, 250, 245, 0.9), rgba(235, 248, 242, 0.85));
-  
-  /* Topbar: Hafif mat */
-  --topbar-bg: linear-gradient(135deg, rgba(248, 252, 250, 0.95), rgba(240, 250, 245, 0.9));
-  
-  /* Metinler: Okunabilirlik için Koyu Yeşil/Siyah */
-  --text-inv: #022c22;
-  --muted-inv: #064e3b;
+  /* Kartlar: Beyaz ve temiz */
+  --card: #ffffff;
+  --card-2: #f8fafc;
+
+  /* Kenarlıklar ve Gölgeler: Çok silik ve yumuşak */
+  --border: rgba(6, 78, 59, 0.1);
+  --card-shadow: 0 4px 20px rgba(0, 0, 0, 0.05), 0 1px 4px rgba(0, 0, 0, 0.02);
+
+  /* Metinler: Okunabilirlik için koyu yeşil/siyah */
+  --text-inv: #022c22; 
+  --muted-inv: #064e3b; 
   --text-primary: #022c22;
   --text-secondary: rgba(2, 44, 34, 0.9);
   --text-muted: rgba(6, 78, 59, 0.8);
-  
-  /* Kartlar: Panelden bir ton koyu/farklı, ama yumuşak */
-  --card: #ffffff;
-  --card-2: #f0fdf4; /* Mint Cream */
-  
-  /* Çerçeveler: Çok silik, göz yormayan yeşil */
-  --border: rgba(6, 78, 59, 0.12);
+
+  /* Butonlar ve Badge'ler */
+  --btn-bg: #ffffff;
+  --badge-color: #047857;
+  --badge-bg: rgba(6, 78, 59, 0.08);
+  --badge-border: transparent;
+
+  /* Tablolar */
+  --table-header-bg: rgba(6, 78, 59, 0.05);
+  --table-row-hover: rgba(6, 78, 59, 0.03);
 }
 
 * {
@@ -775,6 +788,23 @@ a {
   100% { opacity: 0.6; transform: translate(-50%, -50%) scale(1); }
 }
 
+@keyframes pack-pop {
+  0% { transform: scale(0.85); opacity: 0; }
+  60% { transform: scale(1.06); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes tear-move {
+  0% { transform: translateY(-15px) rotate(-3deg); opacity: 0; }
+  70% { transform: translateY(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(0) rotate(0deg); opacity: 1; }
+}
+
+@keyframes card-fly-in {
+  0% { transform: translateY(30px) scale(0.9); opacity: 0; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -863,7 +893,46 @@ a {
   transform: scale(1.1);
 }
 
-/* Dropdown */
+/* Leaderboard Table */
+.leaderboard-header {
+  display: grid;
+  grid-template-columns: 70px 2fr 1fr 1fr 1fr;
+  padding: 12px 16px;
+  background: var(--table-header-bg);
+  border-radius: 12px 12px 0 0;
+  font-weight: 700;
+  color: var(--muted-inv);
+  font-size: 13px;
+}
+
+[data-theme="light"] .leaderboard-header {
+    color: #475569;
+    background: #f1f5f9;
+}
+
+.leaderboard-row {
+  display: grid;
+  grid-template-columns: 70px 2fr 1fr 1fr 1fr;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+  align-items: center;
+  color: var(--text-inv);
+  transition: background 0.2s;
+}
+
+.leaderboard-row:hover { background: var(--table-row-hover); }
+.leaderboard-row:last-child { border-bottom: none; }
+
+/* Rank Colors */
+.rank-1 { color: #fbbf24; text-shadow: 0 0 10px rgba(251,191,36,0.4); }
+.rank-2 { color: #e2e8f0; text-shadow: 0 0 10px rgba(226,232,240,0.4); }
+.rank-3 { color: #d97706; text-shadow: 0 0 10px rgba(217,119,6,0.4); }
+
+[data-theme="light"] .rank-1 { color: #d97706; text-shadow: none; }
+[data-theme="light"] .rank-2 { color: #64748b; text-shadow: none; }
+[data-theme="light"] .rank-3 { color: #b45309; text-shadow: none; }
+
+/* Dropdown select */
 select option {
   background: #1a1a1a !important;
   color: white !important;
@@ -874,7 +943,16 @@ select option {
   color: #000 !important;
 }
 
-/* Mobile Styles */
+/* Prices Page Chart Fix */
+[data-theme="light"] .recharts-cartesian-grid-horizontal line,
+[data-theme="light"] .recharts-cartesian-grid-vertical line {
+    stroke: rgba(0,0,0,0.05);
+}
+[data-theme="light"] .recharts-text {
+    fill: #64748b !important;
+}
+
+/* Mobile Responsive */
 @media (max-width: 1024px) {
   .main-grid {
     grid-template-columns: 1fr !important;
@@ -895,6 +973,31 @@ select option {
   .topbar > div:last-child { margin-left: 0 !important; width: 100%; justify-content: center; }
   .picks { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)) !important; }
   .modal-grid { grid-template-columns: repeat(3, 1fr); }
+  
+  /* Leaderboard Mobile */
+  .leaderboard-header, .leaderboard-row {
+    grid-template-columns: 50px 1.5fr 1fr !important; 
+    font-size: 12px; padding: 10px; gap: 8px;
+  }
+  .leaderboard-header > div:nth-last-child(1),
+  .leaderboard-header > div:nth-last-child(2),
+  .leaderboard-row > div:nth-last-child(1),
+  .leaderboard-row > div:nth-last-child(2) { display: none; }
+  
+  /* Prices Page Mobile */
+  .price-row {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+    padding: 12px !important;
+  }
+  .price-row > div:first-child { grid-column: 1 / -1; }
+  .price-row > div:not(:first-child) {
+    display: flex; justify-content: space-between; padding: 8px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+  }
+  [data-theme="light"] .price-row > div:not(:first-child) {
+      border-bottom: 1px solid rgba(0,0,0,0.05);
+  }
 }
 
 @media (max-width: 480px) {
