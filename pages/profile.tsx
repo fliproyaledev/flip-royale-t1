@@ -1,26 +1,28 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, ChangeEvent } from 'react'
 import { useRouter } from 'next/router'
 import ThemeToggle from '../components/ThemeToggle'
 
 const DEFAULT_AVATAR = '/avatars/default-avatar.png'
 
-// Tipleri güncelledik ki API'den gelen verilerle eşleşsin
+// User tipi güncellendi (name alanı eklendi)
 type User = {
   id: string
   username: string
+  name?: string // <-- Eklendi
   walletAddress?: string
   createdAt: string | number
   lastLogin: string | number
   avatar?: string
-  totalPoints: number     // <-- Eklendi
-  bankPoints: number      // <-- Eklendi
-  currentRound: number    // <-- Eklendi
-  inventory?: Record<string, number> // <-- Eklendi
+  totalPoints: number
+  bankPoints: number
+  currentRound: number
+  inventory?: Record<string, number>
+  roundHistory?: any[]
 }
 
 type RoundHistory = {
   dayKey: string
-  items: Array<{         // 'picks' yerine 'items' (API yapısına uygun)
+  items: Array<{
     symbol: string
     dir: 'UP' | 'DOWN'
     points: number
@@ -35,6 +37,8 @@ export default function Profile(){
   const [history, setHistory] = useState<RoundHistory[]>([])
   const [mounted, setMounted] = useState(false)
   const [loading, setLoading] = useState(true)
+  // Avatar yükleme durumu için state
+  const [isUploading, setIsUploading] = useState(false)
 
   useEffect(() => {
     setMounted(true)
@@ -56,12 +60,11 @@ export default function Profile(){
             if (j.ok && j.user) {
                 setUser(j.user)
                 
-                // History Dönüştürme (API -> Frontend)
                 if (Array.isArray(j.user.roundHistory)) {
                     const mappedHistory = j.user.roundHistory.map((h: any) => ({
                         dayKey: h.date,
                         totalPoints: h.totalPoints,
-                        items: h.items || [] // Picks yerine items kullanıyoruz
+                        items: h.items || []
                     }))
                     setHistory(mappedHistory)
                 }
@@ -73,6 +76,56 @@ export default function Profile(){
     load()
   }, [])
 
+  // --- FOTOĞRAF DEĞİŞTİRME FONKSİYONU ---
+  const handleAvatarChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !user) return
+
+    // Basit boyut kontrolü (Örn: 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+        alert("File is too large. Please choose an image under 2MB.")
+        return
+    }
+
+    setIsUploading(true)
+
+    // Dosyayı Base64 string'e çevir
+    const reader = new FileReader()
+    reader.readAsDataURL(file)
+    reader.onloadend = async () => {
+        const base64data = reader.result as string
+
+        try {
+            // API'ye gönder
+            const res = await fetch('/api/users/update-avatar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: user.id, avatarData: base64data })
+            })
+            
+            const data = await res.json()
+            if (data.ok) {
+                // Başarılı olursa yerel state'i güncelle (sayfa yenilenmeden değişir)
+                setUser({ ...user, avatar: base64data })
+                // Localstorage'ı da güncellemek iyi olur
+                const saved = localStorage.getItem('flipflop-user')
+                if (saved) {
+                    const parsed = JSON.parse(saved)
+                    localStorage.setItem('flipflop-user', JSON.stringify({ ...parsed, avatar: base64data }))
+                }
+            } else {
+                alert("Failed to update avatar: " + (data.error || 'Unknown error'))
+            }
+        } catch (error) {
+            console.error("Avatar update error:", error)
+            alert("An error occurred while uploading.")
+        } finally {
+            setIsUploading(false)
+        }
+    }
+  }
+  // --------------------------------------
+
   if (!mounted || loading) {
     return (
         <div className="app" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
@@ -83,19 +136,17 @@ export default function Profile(){
 
   if (!user) return null
 
-  // --- İSTATİSTİK HESAPLAMALARI (DÜZELTİLDİ) ---
-  // Artık direkt sunucudan gelen doğru verileri kullanıyoruz.
   const totalPoints = user.totalPoints || 0
   const totalRounds = user.currentRound ? user.currentRound - 1 : 0
   const averagePoints = totalRounds > 0 ? Math.round(totalPoints / totalRounds) : 0
   
-  // Kart Sayısı: Inventory'deki tüm kartların toplamı
   const cardsCollected = user.inventory 
     ? Object.values(user.inventory).reduce((sum: number, count: any) => sum + Number(count), 0)
     : 0
-
-  // Paket Sayısı Tahmini: Her pakette 5 kart varsa
   const packsOpened = Math.ceil(cardsCollected / 5)
+
+  // Görüntülenecek isim: Varsa 'name', yoksa 'username', hiçbiri yoksa 'Player'
+  const displayName = user.name || user.username || 'Player'
 
   return (
     <div className="app">
@@ -138,7 +189,7 @@ export default function Profile(){
           }}>
             <img
               src={user.avatar || DEFAULT_AVATAR}
-              alt={user.username}
+              alt={displayName}
               style={{width: '100%', height: '100%', objectFit: 'cover'}}
               onError={(e) => { (e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR }}
             />
@@ -164,7 +215,6 @@ export default function Profile(){
       <div className="panel">
         <h2>Profile</h2>
         
-        {/* User Info & Stats Grid */}
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
@@ -173,15 +223,15 @@ export default function Profile(){
         }}>
           {/* Basic Info */}
           <div style={{
-            background: 'rgba(255,255,255,0.05)',
+            background: 'var(--card-2)',
             padding: 24,
             borderRadius: 16,
-            border: '1px solid rgba(255,255,255,0.1)'
+            border: '1px solid var(--border)'
           }}>
             <h3 style={{marginBottom: 16, fontSize: 18, fontWeight: 700}}>Account Information</h3>
             <div style={{display: 'flex', flexDirection: 'column', gap: 12}}>
               <div style={{display:'flex', alignItems:'center', gap:16}}>
-                <div style={{width:72, height:72, borderRadius:'50%', overflow:'hidden', border:'3px solid rgba(255,255,255,0.25)', boxShadow:'0 6px 16px rgba(0,0,0,0.35)'}}>
+                <div style={{width:72, height:72, borderRadius:'50%', overflow:'hidden', border:'3px solid var(--border)', boxShadow:'var(--card-shadow)'}}>
                   <img
                     src={user.avatar || DEFAULT_AVATAR}
                     alt="Avatar"
@@ -190,22 +240,23 @@ export default function Profile(){
                   />
                 </div>
                 <div>
-                  <label className="btn primary" style={{display:'inline-block', cursor:'pointer', fontSize:13, padding:'8px 16px'}}>
-                    Change Photo
+                  {/* FOTOĞRAF DEĞİŞTİRME BUTONU */}
+                  <label className={`btn primary ${isUploading ? 'disabled' : ''}`} style={{display:'inline-block', cursor: isUploading ? 'not-allowed' : 'pointer', fontSize:13, padding:'8px 16px', opacity: isUploading ? 0.7 : 1}}>
+                    {isUploading ? 'Uploading...' : 'Change Photo'}
                     <input
                         type="file"
                         accept="image/*"
+                        disabled={isUploading}
                         style={{display:'none'}}
-                        onChange={(e) => {
-                            // Avatar upload logic here
-                        }}
+                        onChange={handleAvatarChange}
                     />
                   </label>
                 </div>
               </div>
               <div>
                 <div className="muted" style={{marginBottom: 4}}>Username</div>
-                <div style={{fontSize: 16, fontWeight: 600}}>{user.username}</div>
+                {/* İSİM DÜZELTMESİ BURADA YAPILDI */}
+                <div style={{fontSize: 16, fontWeight: 600}}>{displayName}</div>
               </div>
               <div>
                 <div className="muted" style={{marginBottom: 4}}>Member Since</div>
@@ -218,35 +269,35 @@ export default function Profile(){
 
            {/* Game Statistics */}
            <div style={{
-             background: 'rgba(255,255,255,0.05)',
+             background: 'var(--card-2)',
              padding: 24,
              borderRadius: 16,
-             border: '1px solid rgba(255,255,255,0.1)'
+             border: '1px solid var(--border)'
            }}>
              <h3 style={{marginBottom: 16, fontSize: 18, fontWeight: 700}}>Game Statistics</h3>
              <div style={{display: 'flex', flexDirection: 'column', gap: 16}}>
                
-               <div className="stat-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: 'rgba(255,255,255,0.05)', borderRadius: 12 }}>
+               <div className="stat-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: 'var(--card)', borderRadius: 12 }}>
                  <div className="muted">Total Points</div>
                  <div className="points good" style={{ fontSize: 20 }}>{totalPoints.toLocaleString()}</div>
                </div>
 
-               <div className="stat-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: 'rgba(255,255,255,0.05)', borderRadius: 12 }}>
+               <div className="stat-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: 'var(--card)', borderRadius: 12 }}>
                  <div className="muted">Rounds Played</div>
                  <div style={{ fontSize: 20, fontWeight: 700 }}>{totalRounds}</div>
                </div>
 
-               <div className="stat-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: 'rgba(255,255,255,0.05)', borderRadius: 12 }}>
+               <div className="stat-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: 'var(--card)', borderRadius: 12 }}>
                  <div className="muted">Average Points</div>
                  <div style={{ fontSize: 20, fontWeight: 700 }}>{averagePoints.toLocaleString()}</div>
                </div>
 
-               <div className="stat-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: 'rgba(255,255,255,0.05)', borderRadius: 12 }}>
+               <div className="stat-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: 'var(--card)', borderRadius: 12 }}>
                  <div className="muted">Packs Opened</div>
                  <div style={{ fontSize: 20, fontWeight: 700 }}>{packsOpened}</div>
                </div>
 
-               <div className="stat-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: 'rgba(255,255,255,0.05)', borderRadius: 12 }}>
+               <div className="stat-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: 'var(--card)', borderRadius: 12 }}>
                  <div className="muted">Cards Collected</div>
                  <div style={{ fontSize: 20, fontWeight: 700 }}>{cardsCollected}</div>
                </div>
@@ -266,16 +317,15 @@ export default function Profile(){
             <div style={{display: 'flex', flexDirection: 'column', gap: 16}}>
               {history.slice().reverse().map((round, index) => {
                 const roundTotal = round.totalPoints || 0
-                // API'den 'items' geliyor, 'picks' değil. Onu düzeltiyoruz:
                 const picks = Array.isArray(round.items) ? round.items : [] 
-                const roundNumber = history.length - index // Basit sayaç
+                const roundNumber = history.length - index
                 
                 return (
                 <div key={round.dayKey} style={{
-                  background: 'rgba(255,255,255,0.05)',
+                  background: 'var(--card-2)',
                   padding: 20,
                   borderRadius: 12,
-                  border: '1px solid rgba(255,255,255,0.1)'
+                  border: '1px solid var(--border)'
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -290,7 +340,7 @@ export default function Profile(){
                   <div style={{display: 'flex', flexWrap: 'wrap', gap: 8}}>
                     {picks.map((pick: any, pickIndex: number) => (
                       <div key={pickIndex} style={{
-                        background: 'rgba(255,255,255,0.1)',
+                        background: 'var(--card)',
                         padding: '8px 12px',
                         borderRadius: 8,
                         fontSize: 14,
