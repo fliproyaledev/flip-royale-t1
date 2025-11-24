@@ -986,6 +986,16 @@ useEffect(() => {
             setNextRound(data.user.nextRound)
             const hasSavedNext = data.user.nextRound.some((p: any) => p)
             setNextRoundSaved(hasSavedNext)
+          if (Array.isArray(data.user.roundHistory)) {
+             // Backend verisini (RoundHistoryEntry) -> Frontend tipine (DayResult) çeviriyoruz
+             const mappedHistory = data.user.roundHistory.map((h: any) => ({
+                 dayKey: h.date,        // Tarihi dayKey'e atıyoruz
+                 total: h.totalPoints,
+                 userId: userId,
+                 items: h.items,
+                 roundNumber: h.roundNumber // Tur numarasını da ekliyoruz
+             }));
+             setHistory(mappedHistory);            
           }
           
           // Points
@@ -2185,7 +2195,7 @@ const activeRoundDisplay = currentRound
                    fontSize: 14,
                    color: 'rgba(255,255,255,0.7)'
                  }}>
-                   {round.date}
+                   {round.dayKey}
                  </div>
                </div>
                {/* Round content here */}
