@@ -13,7 +13,7 @@ import { saveDailyRoundSummary, type DailyRoundSummary } from "../../../lib/hist
 
 const CRON_SECRET = process.env.CRON_SECRET;
 
-// ---------------- UTILITY FUNCTIONS (EKSİK KISIMLAR) ----------------
+// ---------------- UTILITY FUNCTIONS ----------------
 
 function nerfFactor(dup: number): number {
   if (dup <= 1) return 1;
@@ -35,19 +35,16 @@ function calcPoints(
 ) {
   if (!isFinite(pStart) || !isFinite(pEnd) || pStart <= 0 || pEnd <= 0) return 0;
 
-  // Yüzdelik değişim: (Kapanış - Açılış) / Açılış
   const pct = ((pEnd - pStart) / pStart) * 100;
   const signed = dir === "UP" ? pct : -pct;
 
   let pts = signed * 100;
 
-  // Nerf (Duplicate) Cezası
   const nerf = nerfFactor(dup);
   const loss = 2 - nerf;
 
   pts = pts >= 0 ? pts * nerf : pts * loss;
   
-  // Puanı -2500 ile +2500 arasında sınırla (Oyun dengesi için)
   pts = clamp(pts, -2500, 2500);
 
   return Math.round(pts);
@@ -77,6 +74,7 @@ export default async function handler(
     const today = utcDayKey();
     const users = await loadUsers();
     const settledUsers: string[] = [];
+    const errors: any[] = []; // <-- HATA ÇÖZÜMÜ: errors değişkeni tanımlandı
     
     // --- GLOBAL İSTATİSTİK DEĞİŞKENLERİ ---
     let dailyTotalPlayers = 0;
@@ -117,7 +115,8 @@ export default async function handler(
       if (!Array.isArray(user.nextRound)) user.nextRound = Array(5).fill(null);
       if (!Array.isArray(user.roundHistory)) user.roundHistory = [];
 
-      // Çifte işlem koruması (TEST MODUNDA BURAYI YORUM SATIRI YAPABİLİRSİNİZ)
+      // Çifte işlem koruması
+      // Not: Test bittikten sonra buradaki yorum satırını açmayı unutmayın
       // if (user.lastSettledDay === today) continue; 
 
       try {
@@ -226,7 +225,9 @@ export default async function handler(
         settledUsers.push(user.id);
 
       } catch (err: any) {
-        errors.push({ uid, error: err.message });
+        // Hata durumunda logla
+        errors.push({ uid, error: err.message }); 
+        console.error(`Error settling user ${uid}:`, err);
       }
     }
 
@@ -248,7 +249,6 @@ export default async function handler(
         bestToken: bestTokenSymbol !== '-' ? { symbol: bestTokenSymbol, changePct: 0 } : null
     };
 
-    // saveDailyRoundSummary'nin import edildiğini varsayıyoruz
     await saveDailyRoundSummary(dailySummary); 
     console.log("📊 [CRON] Global Stats Saved:", dailySummary);
     // -----------------------------------------
@@ -263,7 +263,7 @@ export default async function handler(
     });
 
   } catch (err: any) {
-    console.error("CRON ERROR:", err);
+    console.error("CRON ERROR (Main Block):", err);
     return res.status(500).json({ ok: false, error: err.message });
   }
 }
