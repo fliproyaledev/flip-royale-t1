@@ -1,5 +1,5 @@
 // =======================
-// duels.ts (FINAL FIXED)
+// duels.ts (REDIS UPDATED)
 // =======================
 
 import fs from 'fs'
@@ -8,23 +8,19 @@ import path from 'path'
 import { TOKEN_MAP } from './tokens'
 import type { Token } from './tokens'
 
-import type { DexscreenerPairRef, DexscreenerQuote } from './dexscreener'
-import { getDexPairQuote, findDexPairForToken } from './dexscreener'
-import { getGeckoPoolQuote } from './gecko'
+// ESKİ IMPORTLAR SİLİNDİ (Dexscreener/Gecko)
+// YENİ IMPORT: Fiyatı Redis'ten okuyan fonksiyon
+import { getPriceForToken } from './price' 
 
-// Users
 import {
   getOrCreateUser,
   loadUsers,
   saveUsers,
   creditBank,
   creditGamePoints,
-  debitBank,
-  loadUsersSync,
-  saveUsersSync
+  debitBank
 } from './users'
 
-// KV (Upstash)
 import { loadDuelsKV, saveDuelsKV } from './kv'
 
 // ---------------------
@@ -35,7 +31,8 @@ export type DuelPickInput = { tokenId: string; direction: 'up' | 'down' }
 export type DuelPick = {
   tokenId: string
   direction: 'up' | 'down'
-  network?: string
+  // Network/Pair artık zorunlu değil çünkü Oracle yönetiyor, ama tip uyumu için opsiyonel bırakabiliriz
+  network?: string 
   pair?: string
   locked: boolean
   lockedAt?: string
@@ -70,13 +67,12 @@ export type DuelRoom = {
   }
 }
 
-// ---------------------
-// JSON fallback paths
-// ---------------------
 const DATA_DIR = path.join(process.cwd(), 'data')
 const FILE = path.join(DATA_DIR, 'duels.json')
+const IS_VERCEL = !!process.env.VERCEL
 
 function ensureDir() {
+  if (IS_VERCEL) return
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true })
 }
 
@@ -103,6 +99,7 @@ export async function loadDuels(): Promise<Record<string, DuelRoom>> {
 
 export async function saveDuels(map: Record<string, DuelRoom>): Promise<void> {
   await saveDuelsKV(map).catch(() => {})
+  if (IS_VERCEL) return
   try {
     ensureDir()
     fs.writeFileSync(FILE, JSON.stringify(map, null, 2), 'utf8')
@@ -126,37 +123,30 @@ export function nextMidnightIso(from?: Date): string {
 }
 
 // ---------------------
-// PRICE CALC
+// PRICE CALC (GÜNCELLENDİ)
 // ---------------------
 async function currentSignedPctFor(
   token: Token,
   direction: 'up' | 'down'
-): Promise<{ pct: number; network: string; pair: string } | null> {
+): Promise<{ pct: number; network?: string; pair?: string } | null> {
   
-  const fallbackNet = (token.dexscreenerNetwork || '').toLowerCase()
-  const fallbackPair = (token.dexscreenerPair || '').toLowerCase()
+  // YENİ MANTIK: Direkt Redis Cache'den (Oracle'dan) oku
+  const priceData = await getPriceForToken(token.id)
+  
+  // Eğer veri yoksa veya hata varsa null dön
+  if (!priceData || priceData.source.startsWith('fallback')) return null
 
-  let ref: DexscreenerPairRef | null = null
-
-  if (fallbackNet && fallbackPair) {
-    ref = { network: fallbackNet, pair: fallbackPair }
-  } else {
-    ref = await findDexPairForToken(token)
-    if (!ref) return null
-  }
-
-  const quote = await getDexPairQuote(ref.network, ref.pair)
-  let pct = quote?.changePct
-
-  if (typeof pct !== 'number') {
-    const g = await getGeckoPoolQuote(ref.network, ref.pair, token.symbol)
-    if (g && typeof g.changePct === 'number') pct = g.changePct
-  }
-
+  const pct = priceData.changePct
   if (typeof pct !== 'number') return null
 
   const signed = direction === 'up' ? pct : -pct
-  return { pct: signed, network: ref.network, pair: ref.pair }
+  
+  // Network/Pair bilgisini de priceData'dan alıp dönüyoruz
+  return { 
+    pct: signed, 
+    network: priceData.dexNetwork, 
+    pair: priceData.dexPair 
+  }
 }
 
 // Count today rooms
@@ -308,7 +298,7 @@ export async function lockPicks(
       if (!token) throw new Error('Unknown token')
 
       const r = await currentSignedPctFor(token, req.direction)
-      if (!r) throw new Error('Price fetch error')
+      if (!r) throw new Error('Price fetch error (Oracle not ready?)')
 
       updated.push({
         tokenId: req.tokenId,
