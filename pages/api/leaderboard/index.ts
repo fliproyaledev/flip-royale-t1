@@ -1,34 +1,42 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { loadUsers } from '../../../lib/users'
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ ok: false, error: 'Method Not Allowed' })
+  }
+
   try {
-    const users = await loadUsers()
-    const list = Object.values(users)
-      .map(u => {
-        // Get all daily logs to calculate rounds played and best round
-        const dailyLogs = (u.logs || []).filter(l => l.type === 'daily')
-        const roundsPlayed = dailyLogs.length
-        const bestRound = dailyLogs.length > 0 
-          ? Math.max(0, ...dailyLogs.map(l => l.dailyDelta || 0))
-          : 0
-        
-        return {
-          id: u.id,
-          name: u.name || u.id,
-          avatar: u.avatar,
-          totalPoints: u.totalPoints || 0,
-          roundsPlayed,
-          bestRound,
-          logs: dailyLogs
-        }
-      })
-      .filter(u => u.totalPoints > 0) // Only return users with points
-      .sort((a, b) => (b.totalPoints || 0) - (a.totalPoints || 0))
-    return res.status(200).json({ ok: true, users: list })
-  } catch (err: any) {
-    return res.status(500).json({ ok: false, error: err?.message || 'Internal error' })
+    // 1. Tüm kullanıcıları veritabanından çek
+    const usersMap = await loadUsers()
+    const usersArray = Object.values(usersMap)
+
+    // 2. Puana göre sırala (En yüksekten düşüğe)
+    // Not: İleride 'daily' filtresi gelirse burada mantık değişebilir, şimdilik Total Points.
+    const sortedUsers = usersArray.sort((a, b) => b.totalPoints - a.totalPoints)
+
+    // 3. İlk 100 kişiyi al ve gereksiz verileri temizle (Güvenlik için)
+    const top100 = sortedUsers.slice(0, 100).map(user => ({
+      id: user.id,
+      name: user.name || user.id.substring(0, 8), // İsim yoksa ID'nin başını göster
+      avatar: user.avatar,
+      totalPoints: user.totalPoints,
+      bankPoints: user.bankPoints,
+      roundsPlayed: user.currentRound ? user.currentRound - 1 : 0,
+      activeCards: user.activeRound ? user.activeRound.length : 0,
+      bestRound: 0 // Şimdilik 0, ileride hesaplanabilir
+    }))
+
+    return res.status(200).json({ 
+        ok: true, 
+        users: top100 
+    })
+
+  } catch (error: any) {
+    console.error('Leaderboard API Error:', error)
+    return res.status(500).json({ ok: false, error: 'Internal Server Error' })
   }
 }
-
-
