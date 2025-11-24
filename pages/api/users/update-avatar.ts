@@ -40,8 +40,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // 3. Kaydet
     await saveUsers(usersMap)
-
-    console.log(`[API] Avatar updated for user: ${user.username} (${userId})`)
+    console.log(`[API] Avatar updated for user: ${user.name || user.id}`)
 
     return res.status(200).json({ ok: true, avatar: user.avatar })
 
