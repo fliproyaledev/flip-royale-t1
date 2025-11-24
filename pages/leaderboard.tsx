@@ -8,7 +8,10 @@ type LeaderboardEntry = {
   username: string
   avatar: string
   totalPoints: number
-  // Bank ve ActiveCards verilerini sildik (gerekirse API'den gelmeye devam edebilir ama burada kullanmayacağız)
+  // Bank ve ActiveCards arayüzden kaldırıldığı için tipten de opsiyonel yapabiliriz
+  // ama API'den geliyorsa tutmakta zarar yok, sadece ekrana basmayacağız.
+  bankPoints?: number
+  activeCards?: number
   isCurrentUser?: boolean
 }
 
@@ -31,7 +34,10 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
 export default function LeaderboardPage() {
   const { theme } = useTheme()
   
+  // TABS: 'current' | 'history'
   const [activeTab, setActiveTab] = useState<'current' | 'history'>('current')
+  
+  // DATA STATES
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
   const [historyData, setHistoryData] = useState<HistoryEntry[]>([])
   const [loading, setLoading] = useState(true)
@@ -40,30 +46,41 @@ export default function LeaderboardPage() {
   const [timeUntilReset, setTimeUntilReset] = useState('')
   const [mounted, setMounted] = useState(false)
 
-  // Mount Check & Timer
+  // Mount Check & Timer (DÜZELTİLMİŞ VERSİYON)
   useEffect(() => {
     setMounted(true)
     
     function updateTimer(){
       const now = new Date()
-      const daysUntilMonday = (8 - now.getUTCDay()) % 7
-      const nextMonday = new Date(now)
-      nextMonday.setUTCDate(now.getUTCDate() + daysUntilMonday)
-      nextMonday.setUTCHours(0, 0, 0, 0)
+      const targetDay = 1 // 1 = Pazartesi
+      const currentDay = now.getUTCDay()
       
-      const diff = nextMonday.getTime() - now.getTime()
+      // Hedef güne kaç gün var?
+      let daysUntil = (targetDay + 7 - currentDay) % 7
+      
+      const nextReset = new Date(now)
+      nextReset.setUTCDate(now.getUTCDate() + daysUntil)
+      nextReset.setUTCHours(0, 0, 0, 0) // UTC 00:00
+      
+      // Eğer hesaplanan zaman geçmişteyse (bugün Pazartesi ve saat geçmişse), haftaya at
+      if (nextReset.getTime() <= now.getTime()) {
+        nextReset.setUTCDate(nextReset.getUTCDate() + 7)
+      }
+      
+      const diff = nextReset.getTime() - now.getTime()
       const days = Math.floor(diff / (1000 * 60 * 60 * 24))
       const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
       const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
       
       setTimeUntilReset(`${days}d ${hours}h ${minutes}m`)
     }
+    
     updateTimer()
     const interval = setInterval(updateTimer, 60000)
     return () => clearInterval(interval)
   }, [])
 
-  // --- FETCH CURRENT LEADERBOARD ---
+  // --- FETCH CURRENT LEADERBOARD (GERÇEK VERİ) ---
   useEffect(() => {
     if (activeTab !== 'current') return
     
@@ -79,7 +96,9 @@ export default function LeaderboardPage() {
                 userId: u.id,
                 username: u.name,
                 avatar: u.avatar || DEFAULT_AVATAR,
-                totalPoints: u.totalPoints
+                totalPoints: u.totalPoints,
+                bankPoints: u.bankPoints,
+                activeCards: u.activeCards
             }))
 
             // Mevcut kullanıcıyı bul
@@ -169,12 +188,14 @@ export default function LeaderboardPage() {
 
       <div className="panel" style={{ maxWidth: 1000, margin: '0 auto' }}>
         
+        {/* HEADER & TABS */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 16 }}>
           <div>
             <h2 style={{ marginBottom: 8 }}>Rankings & History</h2>
             <p className="muted">Compete for the top spot or check past winners.</p>
           </div>
           
+          {/* MAIN TABS */}
           <div style={{ display: 'flex', gap: 10 }}>
              <button 
                onClick={() => setActiveTab('current')}
@@ -194,6 +215,7 @@ export default function LeaderboardPage() {
         {/* === TAB: CURRENT === */}
         {activeTab === 'current' && (
             <>
+                {/* Filters & Timer */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap:10 }}>
                      <div className="badge" style={{
                         background: theme === 'light' ? 'rgba(0,207,163,0.1)' : 'rgba(0,207,163,0.2)',
@@ -218,7 +240,7 @@ export default function LeaderboardPage() {
                 </div>
                 )}
 
-                {/* Current User Rank */}
+                {/* Current User Rank (Sticky) */}
                 {currentUser && !loading && (
                 <div style={{ background: theme === 'light' ? 'linear-gradient(135deg, #f0f9ff, #e0f2fe)' : 'linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(37, 99, 235, 0.1))', border: `1px solid ${theme === 'light' ? '#bae6fd' : 'rgba(59, 130, 246, 0.3)'}`, borderRadius: 16, padding: '12px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -230,7 +252,7 @@ export default function LeaderboardPage() {
                 </div>
                 )}
 
-                {/* Table - BANK VE CARDS SİLİNDİ */}
+                {/* Table (Bank ve Cards Kaldırıldı) */}
                 <div style={{ overflowX: 'auto', borderRadius: 12, border: '1px solid var(--border)' }}>
                 <div className="leaderboard-header">
                     <div>RANK</div>
@@ -247,7 +269,7 @@ export default function LeaderboardPage() {
                         <div key={entry.userId} className="leaderboard-row" style={{ background: entry.isCurrentUser ? (theme === 'light' ? '#f0f9ff' : 'rgba(59,130,246,0.1)') : undefined }}>
                             <div style={{ fontWeight: 800, fontSize: 16 }} className={rs.className}>{entry.rank}</div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                <img src={entry.avatar} alt={entry.username} style={{ width: 36, height: 36, borderRadius: '50%' }} onError={(e) => (e.currentTarget.src = DEFAULT_AVATAR)} />
+                                <img src={entry.avatar} alt={entry.username} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} onError={(e) => (e.currentTarget.src = DEFAULT_AVATAR)} />
                                 <span style={{ fontWeight: entry.isCurrentUser ? 700 : 600 }}>{entry.username}</span>
                             </div>
                             <div style={{ textAlign: 'right', fontWeight: 700 }}>{entry.totalPoints.toLocaleString()}</div>
