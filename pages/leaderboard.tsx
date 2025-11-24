@@ -41,6 +41,32 @@ export default function LeaderboardPage() {
   const [loading, setLoading] = useState(true)
   const [currentUser, setCurrentUser] = useState<LeaderboardEntry | null>(null)
   const [timeframe, setTimeframe] = useState<'all' | 'daily'>('all')
+  const [timeUntilReset, setTimeUntilReset] = useState('')
+  const [mounted, setMounted] = useState(false)
+
+  // Mount Check & Timer
+  useEffect(() => {
+    setMounted(true)
+    
+    function updateTimer(){
+      // Calculate time until next Monday 00:00 UTC
+      const now = new Date()
+      const daysUntilMonday = (8 - now.getUTCDay()) % 7
+      const nextMonday = new Date(now)
+      nextMonday.setUTCDate(now.getUTCDate() + daysUntilMonday)
+      nextMonday.setUTCHours(0, 0, 0, 0)
+      
+      const diff = nextMonday.getTime() - now.getTime()
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+      
+      setTimeUntilReset(`${days}d ${hours}h ${minutes}m`)
+    }
+    updateTimer()
+    const interval = setInterval(updateTimer, 60000)
+    return () => clearInterval(interval)
+  }, [])
 
   // --- FETCH CURRENT LEADERBOARD ---
   useEffect(() => {
@@ -49,34 +75,37 @@ export default function LeaderboardPage() {
     async function fetchLeaderboard() {
       setLoading(true)
       try {
-        // MOCK DATA (Test için - Gerçek API'niz varsa açın)
-        // const res = await fetch(`/api/leaderboard?timeframe=${timeframe}`)
-        // ...
+        // GERÇEK API BAĞLANTISI
+        const res = await fetch(`/api/leaderboard?timeframe=${timeframe}`)
+        const data = await res.json()
         
-        const mockData: LeaderboardEntry[] = Array.from({ length: 50 }, (_, i) => ({
-          rank: i + 1,
-          userId: `user-${i}`,
-          username: `Player ${i + 1}`,
-          avatar: `/avatars/avatar-${(i % 8) + 1}.png`,
-          totalPoints: Math.round(100000 - i * 1500 + Math.random() * 500),
-          bankPoints: Math.round(50000 - i * 500),
-          activeCards: Math.floor(Math.random() * 5)
-        }))
-        
-        // Current User
-        let myId = ''
-        try {
-            const saved = localStorage.getItem('flipflop-user')
-            if(saved) myId = JSON.parse(saved).id
-        } catch {}
+        if (data.ok && Array.isArray(data.users)) {
+             // API verisini bizim tipimize map ediyoruz
+             const realData: LeaderboardEntry[] = data.users.map((u: any, i: number) => ({
+                rank: i + 1,
+                userId: u.id,
+                username: u.name,
+                avatar: u.avatar || DEFAULT_AVATAR,
+                totalPoints: u.totalPoints,
+                bankPoints: u.bankPoints,
+                activeCards: u.activeCards
+            }))
 
-        const myEntry = mockData.find(u => u.userId === myId)
-        if (myEntry) {
-            myEntry.isCurrentUser = true
-            setCurrentUser(myEntry)
+            // Mevcut kullanıcıyı bul
+            let myId = ''
+            try {
+                const saved = localStorage.getItem('flipflop-user')
+                if(saved) myId = JSON.parse(saved).id
+            } catch {}
+
+            const myEntry = realData.find(u => u.userId === myId)
+            if (myEntry) {
+                myEntry.isCurrentUser = true
+                setCurrentUser(myEntry)
+            }
+
+            setLeaderboard(realData)
         }
-
-        setLeaderboard(mockData)
       } catch (error) {
         console.error('Failed to fetch leaderboard:', error)
       } finally {
@@ -113,7 +142,7 @@ export default function LeaderboardPage() {
   // Rank Styles Helper
   const getRankStyle = (rank: number) => {
     if (rank === 1) return { color: theme === 'light' ? '#d97706' : '#fbbf24', emoji: '🥇', className: 'rank-1' }
-    if (rank === 2) return { color: theme === 'light' ? '#94a3b8' : '#e2e8f0', emoji: '🥈', className: 'rank-2' }
+    if (rank === 2) return { color: theme === 'light' ? '#64748b' : '#e2e8f0', emoji: '🥈', className: 'rank-2' }
     if (rank === 3) return { color: theme === 'light' ? '#b45309' : '#d97706', emoji: '🥉', className: 'rank-3' }
     return { color: 'inherit', emoji: `#${rank}`, className: '' }
   }
@@ -122,9 +151,29 @@ export default function LeaderboardPage() {
     <div className="app">
       <header className="topbar">
           <div className="brand">
-            <span style={{fontWeight: 900, fontSize: 24}}>LEADERBOARD</span>
+            <img src="/logo.png" alt="FLIP ROYALE" className="logo" onError={(e) => {
+                const target = e.currentTarget as HTMLImageElement
+                target.src = '/logo.svg'
+                target.onerror = () => {
+                  target.style.display = 'none'
+                  const parent = target.parentElement
+                  if (parent) parent.innerHTML = '<span class="dot"></span> FLIP ROYALE'
+                }
+              }} />
           </div>
-          <a href="/" className="btn ghost">← Back to Arena</a>
+          
+          <nav className="tabs">
+            <a className="tab" href="/">PLAY</a>
+            <a className="tab" href="/prices">PRICES</a>
+            <a className="tab" href="/arena">ARENA</a>
+            <a className="tab" href="/guide">GUIDE</a>
+            <a className="tab" href="/inventory">INVENTORY</a>
+            <a className="tab active" href="/leaderboard">LEADERBOARD</a>
+            <a className="tab" href="/history">HISTORY</a>
+            <a className="tab" href="/profile">PROFILE</a>
+          </nav>
+
+          <div style={{ width: 48 }}></div> {/* Spacer for alignment */}
       </header>
 
       <div className="panel" style={{ maxWidth: 1000, margin: '0 auto' }}>
@@ -157,10 +206,18 @@ export default function LeaderboardPage() {
         {activeTab === 'current' && (
             <>
                 {/* Timeframe Filter */}
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap:10 }}>
+                     <div className="badge" style={{
+                        background: theme === 'light' ? 'rgba(0,207,163,0.1)' : 'rgba(0,207,163,0.2)',
+                        borderColor: theme === 'light' ? 'rgba(0,207,163,0.2)' : 'rgba(0,207,163,0.3)',
+                        color: theme === 'light' ? '#059669' : '#86efac'
+                      }}>
+                        Weekly reset in: {mounted ? timeUntilReset : '...'}
+                      </div>
+
                     <div style={{ display: 'flex', background: theme === 'light' ? '#f1f5f9' : 'rgba(255,255,255,0.1)', padding: 4, borderRadius: 12 }}>
-                        <button onClick={() => setTimeframe('all')} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: timeframe === 'all' ? (theme === 'light' ? 'white' : 'rgba(255,255,255,0.2)') : 'transparent', color: theme === 'light' ? (timeframe === 'all' ? '#0f172a' : '#64748b') : 'white', fontWeight: 700, cursor: 'pointer', boxShadow: timeframe === 'all' ? '0 2px 4px rgba(0,0,0,0.1)' : 'none' }}>All Time</button>
-                        <button onClick={() => setTimeframe('daily')} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: timeframe === 'daily' ? (theme === 'light' ? 'white' : 'rgba(255,255,255,0.2)') : 'transparent', color: theme === 'light' ? (timeframe === 'daily' ? '#0f172a' : '#64748b') : 'white', fontWeight: 700, cursor: 'pointer', boxShadow: timeframe === 'daily' ? '0 2px 4px rgba(0,0,0,0.1)' : 'none' }}>Today</button>
+                        <button onClick={() => setTimeframe('all')} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: timeframe === 'all' ? (theme === 'light' ? 'white' : 'rgba(255,255,255,0.2)') : 'transparent', color: theme === 'light' ? (timeframe === 'all' ? '#0f172a' : '#ffffff') : 'white', fontWeight: 700, cursor: 'pointer', boxShadow: timeframe === 'all' ? '0 2px 4px rgba(0,0,0,0.1)' : 'none' }}>All Time</button>
+                        <button onClick={() => setTimeframe('daily')} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: timeframe === 'daily' ? (theme === 'light' ? 'white' : 'rgba(255,255,255,0.2)') : 'transparent', color: theme === 'light' ? (timeframe === 'daily' ? '#0f172a' : '#ffffff') : 'white', fontWeight: 700, cursor: 'pointer', boxShadow: timeframe === 'daily' ? '0 2px 4px rgba(0,0,0,0.1)' : 'none' }}>Today</button>
                     </div>
                 </div>
 
@@ -200,7 +257,7 @@ export default function LeaderboardPage() {
                         <div key={entry.userId} className="leaderboard-row" style={{ background: entry.isCurrentUser ? (theme === 'light' ? '#f0f9ff' : 'rgba(59,130,246,0.1)') : undefined }}>
                             <div style={{ fontWeight: 800, fontSize: 16 }} className={rs.className}>{entry.rank}</div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                <img src={entry.avatar} alt={entry.username} style={{ width: 36, height: 36, borderRadius: '50%' }} onError={(e) => (e.currentTarget.src = DEFAULT_AVATAR)} />
+                                <img src={entry.avatar} alt={entry.username} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} onError={(e) => (e.currentTarget.src = DEFAULT_AVATAR)} />
                                 <span style={{ fontWeight: entry.isCurrentUser ? 700 : 600 }}>{entry.username}</span>
                             </div>
                             <div style={{ textAlign: 'right', fontWeight: 700 }}>{entry.totalPoints.toLocaleString()}</div>
@@ -238,7 +295,7 @@ export default function LeaderboardPage() {
                                 <div>
                                     <div className="muted" style={{ fontSize: 11, marginBottom: 4 }}>TOP PLAYER</div>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                        {day.topPlayer?.avatar && <img src={day.topPlayer.avatar} style={{ width: 28, height: 28, borderRadius: '50%' }} />}
+                                        {day.topPlayer?.avatar && <img src={day.topPlayer.avatar} style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }} />}
                                         <div style={{ fontWeight: 700, fontSize: 16 }}>{day.topPlayer?.username || 'None'}</div>
                                     </div>
                                     <div style={{ fontSize: 13, color: 'var(--accent-green)', fontWeight: 600 }}>
