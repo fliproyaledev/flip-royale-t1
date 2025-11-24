@@ -14,6 +14,21 @@ type OraclePriceData = {
 };
 
 /**
+ * Basit URL Ayrıştırıcı
+ * Oracle'dan gelen "https://dexscreener.com/base/0x123..." linkini parçalar.
+ */
+function parseDexUrl(url?: string) {
+  if (!url) return { network: undefined, pair: undefined };
+  try {
+    const parts = url.split('/'); // [https:, "", dexscreener.com, base, 0x...]
+    if (parts.length >= 5) {
+      return { network: parts[3], pair: parts[4] };
+    }
+  } catch {}
+  return { network: undefined, pair: undefined };
+}
+
+/**
  * Tek bir tokenin fiyatını Redis'ten getirir.
  * Hem API hem de Cron (settle-rounds) tarafından kullanılır.
  */
@@ -23,16 +38,21 @@ export async function getPriceForToken(tokenId: string) {
     const allPrices = await kv.get<OraclePriceData[]>('GLOBAL_PRICE_CACHE');
 
     if (!allPrices || !Array.isArray(allPrices)) {
-      throw new Error('Oracle data not found in Redis');
+      // Sessizce logla, hata fırlatma ki site çökmesin
+      console.warn('[PriceReader] Oracle data missing in Redis');
+      throw new Error('No data');
     }
 
     // 2. İstenen tokeni bul (ID veya Symbol eşleşmesi)
     const targetId = tokenId.toLowerCase();
     const priceData = allPrices.find(
-      (p) => p.tokenId === targetId || p.symbol.toLowerCase() === targetId
+      (p) => p.tokenId.toLowerCase() === targetId || p.symbol.toLowerCase() === targetId
     );
 
     if (priceData) {
+      // URL'den network ve pair bilgisini çıkar
+      const meta = parseDexUrl(priceData.dexUrl);
+
       return {
         p0: priceData.p0,
         pLive: priceData.pLive,
@@ -40,16 +60,18 @@ export async function getPriceForToken(tokenId: string) {
         changePct: priceData.changePct,
         fdv: priceData.fdv,
         ts: priceData.ts,
-        source: 'oracle-cache', // Kaynak artık Oracle
+        source: 'oracle-cache',
         dexUrl: priceData.dexUrl,
-        // Oracle zaten bunları hesaplayıp gönderdiği için direkt kullanıyoruz
+        // duels.ts için gerekli alanlar eklendi:
+        dexNetwork: meta.network,
+        dexPair: meta.pair
       };
     }
   } catch (error) {
-    console.error(`[PriceReader] Error fetching ${tokenId}:`, error);
+    // console.error(`[PriceReader] Error fetching ${tokenId}`, error);
   }
 
-  // 3. Fallback (Eğer Redis boşsa veya token yoksa oyun patlamasın diye)
+  // 3. Fallback (Veri yoksa)
   return {
     p0: 0,
     pLive: 0,
@@ -58,6 +80,8 @@ export async function getPriceForToken(tokenId: string) {
     fdv: 0,
     ts: new Date().toISOString(),
     source: 'fallback-empty',
-    dexUrl: ''
+    dexUrl: '',
+    dexNetwork: undefined,
+    dexPair: undefined
   };
 }
