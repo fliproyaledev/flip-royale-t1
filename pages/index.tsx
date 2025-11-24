@@ -962,14 +962,13 @@ useEffect(() => {
   }, [active, nextRound])
 
   // Load user data from API
+// Load User Data from API
   async function loadUserData() {
     try {
-      // Initial check for user ID (still locally cached for session)
+      // Initial check for user ID
       const savedUser = localStorage.getItem('flipflop-user')
       let userId = ''
-      if (savedUser) {
-          try { userId = JSON.parse(savedUser).id } catch {}
-      }
+      if (savedUser) { try { userId = JSON.parse(savedUser).id } catch {} }
       
       if (!userId) return
 
@@ -978,50 +977,43 @@ useEffect(() => {
       
       if (data.ok && data.user) {
           setUser(data.user)
-          if (data.user.inventory) setInventory(data.user.inventory)
           
-          // Load rounds
+          // --- HISTORY (GEÇMİŞ) GÜNCELLEMESİ ---
+          if (Array.isArray(data.user.roundHistory)) {
+             // Backend verisini Frontend tipine çeviriyoruz
+             const mappedHistory = data.user.roundHistory.map((h: any) => ({
+                 dayKey: h.date,        
+                 total: h.totalPoints,
+                 userId: userId,
+                 items: h.items,
+                 roundNumber: h.roundNumber 
+             }));
+             setHistory(mappedHistory);
+          }
+          // -------------------------------------
+
+          if (data.user.inventory) setInventory(data.user.inventory)
           if (Array.isArray(data.user.activeRound)) setActive(data.user.activeRound)
+          
           if (Array.isArray(data.user.nextRound)) {
             setNextRound(data.user.nextRound)
             const hasSavedNext = data.user.nextRound.some((p: any) => p)
             setNextRoundSaved(hasSavedNext)
-          if (Array.isArray(data.user.roundHistory)) {
-             // Backend verisini (RoundHistoryEntry) -> Frontend tipine (DayResult) çeviriyoruz
-             const mappedHistory = data.user.roundHistory.map((h: any) => ({
-                 dayKey: h.date,        // Tarihi dayKey'e atıyoruz
-                 total: h.totalPoints,
-                 userId: userId,
-                 items: h.items,
-                 roundNumber: h.roundNumber // Tur numarasını da ekliyoruz
-             }));
-             setHistory(mappedHistory);            
           }
           
-          // Points
-          if (typeof data.user.bankPoints === 'number') {
-              setPoints(data.user.bankPoints)
-          }
-          if (typeof data.user.giftPoints === 'number') {
-              setGiftPoints(data.user.giftPoints)
-          }
-          if (typeof data.user.totalPoints === 'number') {
-              setEarnedPoints(data.user.totalPoints)
-          }
-          if (typeof data.user.currentRound === 'number') {
-            setCurrentRound(data.user.currentRound) // Sunucudan güncel turu al
-          }
+          if (typeof data.user.bankPoints === 'number') setPoints(data.user.bankPoints)
+          if (typeof data.user.giftPoints === 'number') setGiftPoints(data.user.giftPoints)
+          if (typeof data.user.totalPoints === 'number') setEarnedPoints(data.user.totalPoints)
+          if (typeof data.user.currentRound === 'number') setCurrentRound(data.user.currentRound)
 
           setInventoryLoaded(true)
           setStateLoaded(true)
           setNextRoundLoaded(true)
-          
       }
     } catch(e) {
         console.error("Load failed", e)
     }
   }
-
   useEffect(() => {
     loadUserData()
     
