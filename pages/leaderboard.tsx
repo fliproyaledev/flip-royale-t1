@@ -8,8 +8,7 @@ type LeaderboardEntry = {
   username: string
   avatar: string
   totalPoints: number
-  bankPoints: number
-  activeCards: number
+  // Bank ve ActiveCards verilerini sildik (gerekirse API'den gelmeye devam edebilir ama burada kullanmayacağız)
   isCurrentUser?: boolean
 }
 
@@ -32,10 +31,7 @@ const DEFAULT_AVATAR = '/avatars/default-avatar.png'
 export default function LeaderboardPage() {
   const { theme } = useTheme()
   
-  // TABS: 'current' | 'history'
   const [activeTab, setActiveTab] = useState<'current' | 'history'>('current')
-  
-  // DATA STATES
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
   const [historyData, setHistoryData] = useState<HistoryEntry[]>([])
   const [loading, setLoading] = useState(true)
@@ -49,7 +45,6 @@ export default function LeaderboardPage() {
     setMounted(true)
     
     function updateTimer(){
-      // Calculate time until next Monday 00:00 UTC
       const now = new Date()
       const daysUntilMonday = (8 - now.getUTCDay()) % 7
       const nextMonday = new Date(now)
@@ -75,20 +70,16 @@ export default function LeaderboardPage() {
     async function fetchLeaderboard() {
       setLoading(true)
       try {
-        // GERÇEK API BAĞLANTISI
         const res = await fetch(`/api/leaderboard?timeframe=${timeframe}`)
         const data = await res.json()
         
         if (data.ok && Array.isArray(data.users)) {
-             // API verisini bizim tipimize map ediyoruz
              const realData: LeaderboardEntry[] = data.users.map((u: any, i: number) => ({
                 rank: i + 1,
                 userId: u.id,
                 username: u.name,
                 avatar: u.avatar || DEFAULT_AVATAR,
-                totalPoints: u.totalPoints,
-                bankPoints: u.bankPoints,
-                activeCards: u.activeCards
+                totalPoints: u.totalPoints
             }))
 
             // Mevcut kullanıcıyı bul
@@ -173,19 +164,17 @@ export default function LeaderboardPage() {
             <a className="tab" href="/profile">PROFILE</a>
           </nav>
 
-          <div style={{ width: 48 }}></div> {/* Spacer for alignment */}
+          <div style={{ width: 48 }}></div>
       </header>
 
       <div className="panel" style={{ maxWidth: 1000, margin: '0 auto' }}>
         
-        {/* HEADER & TABS */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 16 }}>
           <div>
             <h2 style={{ marginBottom: 8 }}>Rankings & History</h2>
             <p className="muted">Compete for the top spot or check past winners.</p>
           </div>
           
-          {/* MAIN TABS: Current vs History */}
           <div style={{ display: 'flex', gap: 10 }}>
              <button 
                onClick={() => setActiveTab('current')}
@@ -205,7 +194,6 @@ export default function LeaderboardPage() {
         {/* === TAB: CURRENT === */}
         {activeTab === 'current' && (
             <>
-                {/* Timeframe Filter */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap:10 }}>
                      <div className="badge" style={{
                         background: theme === 'light' ? 'rgba(0,207,163,0.1)' : 'rgba(0,207,163,0.2)',
@@ -242,10 +230,12 @@ export default function LeaderboardPage() {
                 </div>
                 )}
 
-                {/* Table */}
+                {/* Table - BANK VE CARDS SİLİNDİ */}
                 <div style={{ overflowX: 'auto', borderRadius: 12, border: '1px solid var(--border)' }}>
                 <div className="leaderboard-header">
-                    <div>RANK</div><div>PLAYER</div><div style={{textAlign: 'right'}}>POINTS</div><div style={{textAlign: 'right'}}>BANK</div><div style={{textAlign: 'center'}}>CARDS</div>
+                    <div>RANK</div>
+                    <div>PLAYER</div>
+                    <div style={{textAlign: 'right'}}>TOTAL POINTS</div>
                 </div>
                 {loading ? (
                     <div style={{ padding: 40, textAlign: 'center' }} className="muted">Loading rankings...</div>
@@ -257,12 +247,10 @@ export default function LeaderboardPage() {
                         <div key={entry.userId} className="leaderboard-row" style={{ background: entry.isCurrentUser ? (theme === 'light' ? '#f0f9ff' : 'rgba(59,130,246,0.1)') : undefined }}>
                             <div style={{ fontWeight: 800, fontSize: 16 }} className={rs.className}>{entry.rank}</div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                <img src={entry.avatar} alt={entry.username} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} onError={(e) => (e.currentTarget.src = DEFAULT_AVATAR)} />
+                                <img src={entry.avatar} alt={entry.username} style={{ width: 36, height: 36, borderRadius: '50%' }} onError={(e) => (e.currentTarget.src = DEFAULT_AVATAR)} />
                                 <span style={{ fontWeight: entry.isCurrentUser ? 700 : 600 }}>{entry.username}</span>
                             </div>
                             <div style={{ textAlign: 'right', fontWeight: 700 }}>{entry.totalPoints.toLocaleString()}</div>
-                            <div style={{ textAlign: 'right', fontSize: 13 }} className="muted">{entry.bankPoints.toLocaleString()}</div>
-                            <div style={{ textAlign: 'center' }}><span className="badge">{entry.activeCards}</span></div>
                         </div>
                         )
                     })}
