@@ -1,6 +1,6 @@
 // pages/api/users/update-avatar.ts
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { loadUsers, saveUsers } from '../../lib/users'
+import { loadUsers, saveUsers } from '../../../lib/users'
 
 // Payload boyutu limiti (Next.js varsayılanı 4MB, bunu artırabiliriz gerekirse)
 export const config = {
