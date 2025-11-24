@@ -4,6 +4,7 @@ import ThemeToggle from '../components/ThemeToggle'
 
 const DEFAULT_AVATAR = '/avatars/default-avatar.png'
 
+// Tipleri güncelledik ki API'den gelen verilerle eşleşsin
 type User = {
   id: string
   username: string
@@ -11,19 +12,21 @@ type User = {
   createdAt: string | number
   lastLogin: string | number
   avatar?: string
+  totalPoints: number     // <-- Eklendi
+  bankPoints: number      // <-- Eklendi
+  currentRound: number    // <-- Eklendi
+  inventory?: Record<string, number> // <-- Eklendi
 }
 
 type RoundHistory = {
   dayKey: string
-  picks: Array<{
+  items: Array<{         // 'picks' yerine 'items' (API yapısına uygun)
     symbol: string
-    direction: 'UP' | 'DOWN'
+    dir: 'UP' | 'DOWN'
     points: number
     duplicateIndex: number
   }>
   totalPoints: number
-  boostLevel: number
-  boostActive: boolean
 }
 
 export default function Profile(){
@@ -31,6 +34,7 @@ export default function Profile(){
   const [user, setUser] = useState<User | null>(null)
   const [history, setHistory] = useState<RoundHistory[]>([])
   const [mounted, setMounted] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     setMounted(true)
@@ -51,22 +55,47 @@ export default function Profile(){
             const j = await r.json()
             if (j.ok && j.user) {
                 setUser(j.user)
+                
+                // History Dönüştürme (API -> Frontend)
                 if (Array.isArray(j.user.roundHistory)) {
-                    setHistory(j.user.roundHistory)
+                    const mappedHistory = j.user.roundHistory.map((h: any) => ({
+                        dayKey: h.date,
+                        totalPoints: h.totalPoints,
+                        items: h.items || [] // Picks yerine items kullanıyoruz
+                    }))
+                    setHistory(mappedHistory)
                 }
             }
-        } catch(e) { console.error(e) }
+        } catch(e) { console.error(e) } finally {
+            setLoading(false)
+        }
     }
     load()
   }, [])
 
-  if (!mounted || !user) {
-    return <div>Loading...</div>
+  if (!mounted || loading) {
+    return (
+        <div className="app" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
+            <div className="muted">Loading profile...</div>
+        </div>
+    )
   }
 
-  const totalPoints = history.reduce((sum, round) => sum + (round.totalPoints || 0), 0)
-  const totalRounds = history.length
+  if (!user) return null
+
+  // --- İSTATİSTİK HESAPLAMALARI (DÜZELTİLDİ) ---
+  // Artık direkt sunucudan gelen doğru verileri kullanıyoruz.
+  const totalPoints = user.totalPoints || 0
+  const totalRounds = user.currentRound ? user.currentRound - 1 : 0
   const averagePoints = totalRounds > 0 ? Math.round(totalPoints / totalRounds) : 0
+  
+  // Kart Sayısı: Inventory'deki tüm kartların toplamı
+  const cardsCollected = user.inventory 
+    ? Object.values(user.inventory).reduce((sum: number, count: any) => sum + Number(count), 0)
+    : 0
+
+  // Paket Sayısı Tahmini: Her pakette 5 kart varsa
+  const packsOpened = Math.ceil(cardsCollected / 5)
 
   return (
     <div className="app">
@@ -94,43 +123,6 @@ export default function Profile(){
         </nav>
         <div style={{display: 'flex', alignItems: 'center', gap: 12, marginLeft: 'auto'}}>
           <ThemeToggle />
-          <a 
-            href="https://x.com/fliproyale" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 48,
-              height: 48,
-              borderRadius: 12,
-              background: 'rgba(255,255,255,0.1)',
-              border: '1px solid rgba(255,255,255,0.2)',
-              color: 'white',
-              textDecoration: 'none',
-              transition: 'all 0.3s',
-              cursor: 'pointer',
-              backdropFilter: 'blur(10px)',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.15)'
-              e.currentTarget.style.transform = 'scale(1.05)'
-              e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.1)'
-              e.currentTarget.style.transform = 'scale(1)'
-              e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)'
-            }}
-            title="Follow us on X"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style={{display: 'block'}}>
-              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-            </svg>
-          </a>
-          
           <div style={{
             width: 44,
             height: 44,
@@ -148,9 +140,7 @@ export default function Profile(){
               src={user.avatar || DEFAULT_AVATAR}
               alt={user.username}
               style={{width: '100%', height: '100%', objectFit: 'cover'}}
-              onError={(e) => {
-                (e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR
-              }}
+              onError={(e) => { (e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR }}
             />
           </div>
           
@@ -159,23 +149,11 @@ export default function Profile(){
               localStorage.removeItem('flipflop-user')
               window.location.href = '/auth'
             }}
+            className="btn"
             style={{
               background: 'rgba(239,68,68,0.2)',
-              border: '1px solid rgba(239,68,68,0.3)',
-              color: '#fca5a5',
-              padding: '8px 16px',
-              borderRadius: 10,
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'all 0.3s',
-              whiteSpace: 'nowrap'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(239,68,68,0.3)'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'rgba(239,68,68,0.2)'
+              borderColor: 'rgba(239,68,68,0.3)',
+              color: '#fca5a5'
             }}
           >
             Logout
@@ -186,7 +164,7 @@ export default function Profile(){
       <div className="panel">
         <h2>Profile</h2>
         
-        {/* User Info */}
+        {/* User Info & Stats Grid */}
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
@@ -212,70 +190,33 @@ export default function Profile(){
                   />
                 </div>
                 <div>
-                  <label
-                    htmlFor="avatar-upload"
-                    className="btn primary"
-                    style={{display:'inline-block', cursor:'pointer', fontSize:13, padding:'8px 16px'}}
-                  >
+                  <label className="btn primary" style={{display:'inline-block', cursor:'pointer', fontSize:13, padding:'8px 16px'}}>
                     Change Photo
+                    <input
+                        type="file"
+                        accept="image/*"
+                        style={{display:'none'}}
+                        onChange={(e) => {
+                            // Avatar upload logic here
+                        }}
+                    />
                   </label>
-                  <input
-                    id="avatar-upload"
-                    type="file"
-                    accept="image/*"
-                    style={{display:'none'}}
-                    onChange={(event) => {
-                      const file = event.target.files?.[0]
-                      if (!file) return
-                      const reader = new FileReader()
-                      reader.onload = () => {
-                        const avatarUrl = reader.result as string
-                        const updatedUser = { ...user, avatar: avatarUrl, lastLogin: user.lastLogin }
-                        setUser(updatedUser)
-                        try { localStorage.setItem('flipflop-user', JSON.stringify(updatedUser)) } catch {}
-                      }
-                      reader.readAsDataURL(file)
-                    }}
-                  />
                 </div>
               </div>
               <div>
-                <div style={{fontSize: 14, color: 'rgba(255,255,255,0.7)', marginBottom: 4}}>Username</div>
-                <div style={{fontSize: 16, fontWeight: 600, color: 'white'}}>{user.username}</div>
+                <div className="muted" style={{marginBottom: 4}}>Username</div>
+                <div style={{fontSize: 16, fontWeight: 600}}>{user.username}</div>
               </div>
               <div>
-                <div style={{fontSize: 14, color: 'rgba(255,255,255,0.7)', marginBottom: 4}}>Member Since</div>
-                <div style={{fontSize: 16, fontWeight: 600, color: 'white'}}>
-                  {isFinite(Number(user.createdAt)) ? new Date(Number(user.createdAt)).toLocaleDateString() : '-'}
+                <div className="muted" style={{marginBottom: 4}}>Member Since</div>
+                <div style={{fontSize: 16, fontWeight: 600}}>
+                  {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-'}
                 </div>
               </div>
-              <div>
-                <div style={{fontSize: 14, color: 'rgba(255,255,255,0.7)', marginBottom: 4}}>Last Login</div>
-                <div style={{fontSize: 16, fontWeight: 600, color: 'white'}}>
-                  {isFinite(Number(user.lastLogin)) ? new Date(Number(user.lastLogin)).toLocaleDateString() : '-'}
-                </div>
-              </div>
-              {user.walletAddress && (
-                <div>
-                  <div style={{fontSize: 14, color: 'rgba(255,255,255,0.7)', marginBottom: 4}}>Wallet Address</div>
-                  <div style={{
-                    fontSize: 14,
-                    fontWeight: 600,
-                    color: 'white',
-                    fontFamily: 'monospace',
-                    background: 'rgba(0,0,0,0.2)',
-                    padding: '8px 12px',
-                    borderRadius: 8,
-                    wordBreak: 'break-all'
-                  }}>
-                    {user.walletAddress}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
 
-                     {/* Stats */}
+           {/* Game Statistics */}
            <div style={{
              background: 'rgba(255,255,255,0.05)',
              padding: 24,
@@ -284,79 +225,32 @@ export default function Profile(){
            }}>
              <h3 style={{marginBottom: 16, fontSize: 18, fontWeight: 700}}>Game Statistics</h3>
              <div style={{display: 'flex', flexDirection: 'column', gap: 16}}>
-               <div style={{
-                 display: 'flex',
-                 justifyContent: 'space-between',
-                 alignItems: 'center',
-                 padding: '12px 16px',
-                 background: 'rgba(255,255,255,0.05)',
-                 borderRadius: 12
-               }}>
-                 <div style={{fontSize: 14, color: 'rgba(255,255,255,0.7)'}}>Total Points</div>
-                 <div style={{
-                   fontSize: 20,
-                   fontWeight: 700,
-                   color: totalPoints >= 0 ? '#86efac' : '#fca5a5'
-                 }}>
-                   {totalPoints.toLocaleString()}
-                 </div>
+               
+               <div className="stat-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: 'rgba(255,255,255,0.05)', borderRadius: 12 }}>
+                 <div className="muted">Total Points</div>
+                 <div className="points good" style={{ fontSize: 20 }}>{totalPoints.toLocaleString()}</div>
                </div>
-               <div style={{
-                 display: 'flex',
-                 justifyContent: 'space-between',
-                 alignItems: 'center',
-                 padding: '12px 16px',
-                 background: 'rgba(255,255,255,0.05)',
-                 borderRadius: 12
-               }}>
-                 <div style={{fontSize: 14, color: 'rgba(255,255,255,0.7)'}}>Rounds Played</div>
-                 <div style={{fontSize: 20, fontWeight: 700, color: 'white'}}>
-                   {totalRounds}
-                 </div>
+
+               <div className="stat-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: 'rgba(255,255,255,0.05)', borderRadius: 12 }}>
+                 <div className="muted">Rounds Played</div>
+                 <div style={{ fontSize: 20, fontWeight: 700 }}>{totalRounds}</div>
                </div>
-               <div style={{
-                 display: 'flex',
-                 justifyContent: 'space-between',
-                 alignItems: 'center',
-                 padding: '12px 16px',
-                 background: 'rgba(255,255,255,0.05)',
-                 borderRadius: 12
-               }}>
-                 <div style={{fontSize: 14, color: 'rgba(255,255,255,0.7)'}}>Average Points</div>
-                 <div style={{
-                   fontSize: 20,
-                   fontWeight: 700,
-                   color: averagePoints >= 0 ? '#86efac' : '#fca5a5'
-                 }}>
-                   {averagePoints.toLocaleString()}
-                 </div>
+
+               <div className="stat-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: 'rgba(255,255,255,0.05)', borderRadius: 12 }}>
+                 <div className="muted">Average Points</div>
+                 <div style={{ fontSize: 20, fontWeight: 700 }}>{averagePoints.toLocaleString()}</div>
                </div>
-               <div style={{
-                 display: 'flex',
-                 justifyContent: 'space-between',
-                 alignItems: 'center',
-                 padding: '12px 16px',
-                 background: 'rgba(255,255,255,0.05)',
-                 borderRadius: 12
-               }}>
-                 <div style={{fontSize: 14, color: 'rgba(255,255,255,0.7)'}}>Packs Opened</div>
-                 <div style={{fontSize: 20, fontWeight: 700, color: 'white'}}>
-                   {Math.floor(totalRounds * 1.2)}
-                 </div>
+
+               <div className="stat-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: 'rgba(255,255,255,0.05)', borderRadius: 12 }}>
+                 <div className="muted">Packs Opened</div>
+                 <div style={{ fontSize: 20, fontWeight: 700 }}>{packsOpened}</div>
                </div>
-               <div style={{
-                 display: 'flex',
-                 justifyContent: 'space-between',
-                 alignItems: 'center',
-                 padding: '12px 16px',
-                 background: 'rgba(255,255,255,0.05)',
-                 borderRadius: 12
-               }}>
-                 <div style={{fontSize: 14, color: 'rgba(255,255,255,0.7)'}}>Cards Collected</div>
-                 <div style={{fontSize: 20, fontWeight: 700, color: 'white'}}>
-                   {Math.floor(totalRounds * 2.5)} / 30
-                 </div>
+
+               <div className="stat-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: 'rgba(255,255,255,0.05)', borderRadius: 12 }}>
+                 <div className="muted">Cards Collected</div>
+                 <div style={{ fontSize: 20, fontWeight: 700 }}>{cardsCollected}</div>
                </div>
+
              </div>
            </div>
         </div>
@@ -365,20 +259,17 @@ export default function Profile(){
         <div>
           <h3 style={{marginBottom: 20, fontSize: 18, fontWeight: 700}}>Round History</h3>
           {history.length === 0 ? (
-            <div style={{
-              textAlign: 'center',
-              padding: 40,
-              color: 'rgba(255,255,255,0.7)',
-              fontSize: 16
-            }}>
+            <div style={{ textAlign: 'center', padding: 40, borderRadius: 12, border: '2px dashed var(--border)', color: 'var(--muted-inv)' }}>
               No rounds played yet. Start playing to see your history!
             </div>
           ) : (
             <div style={{display: 'flex', flexDirection: 'column', gap: 16}}>
               {history.slice().reverse().map((round, index) => {
                 const roundTotal = round.totalPoints || 0
-                const picks = Array.isArray(round.picks) ? round.picks : []
-                const roundNumber = history.length - index
+                // API'den 'items' geliyor, 'picks' değil. Onu düzeltiyoruz:
+                const picks = Array.isArray(round.items) ? round.items : [] 
+                const roundNumber = history.length - index // Basit sayaç
+                
                 return (
                 <div key={round.dayKey} style={{
                   background: 'rgba(255,255,255,0.05)',
@@ -386,89 +277,43 @@ export default function Profile(){
                   borderRadius: 12,
                   border: '1px solid rgba(255,255,255,0.1)'
                 }}>
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: 12
-                  }}>
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 12
-                    }}>
-                      <div style={{
-                        background: 'rgba(255,255,255,0.1)',
-                        padding: '6px 12px',
-                        borderRadius: 8,
-                        fontSize: 12,
-                        fontWeight: 700,
-                        color: 'white'
-                      }}>
-                        Round #{roundNumber}
-                      </div>
-                      <div style={{fontSize: 16, fontWeight: 600, color: 'white'}}>
-                        {new Date(round.dayKey).toLocaleDateString()}
-                      </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div className="badge">Round #{roundNumber}</div>
+                      <div style={{fontSize: 16, fontWeight: 600}}>{new Date(round.dayKey).toLocaleDateString()}</div>
                     </div>
-                    <div style={{
-                      fontSize: 18,
-                      fontWeight: 700,
-                      color: roundTotal >= 0 ? '#86efac' : '#fca5a5'
-                    }}>
+                    <div className={`points ${roundTotal >= 0 ? 'good' : 'bad'}`} style={{fontSize: 18}}>
                       {roundTotal > 0 ? '+' : ''}{roundTotal.toLocaleString()} pts
                     </div>
                   </div>
                   
                   <div style={{display: 'flex', flexWrap: 'wrap', gap: 8}}>
-                    {picks.map((pick, pickIndex) => (
+                    {picks.map((pick: any, pickIndex: number) => (
                       <div key={pickIndex} style={{
                         background: 'rgba(255,255,255,0.1)',
                         padding: '8px 12px',
                         borderRadius: 8,
                         fontSize: 14,
                         fontWeight: 600,
-                        color: 'white',
                         display: 'flex',
                         alignItems: 'center',
                         gap: 6
                       }}>
-                        <span style={{
-                          color: pick.direction === 'UP' ? '#86efac' : '#fca5a5',
-                          fontSize: 12
-                        }}>
-                          {pick.direction === 'UP' ? '▲' : '▼'}
+                        <span className={pick.dir === 'UP' ? 'dir-up' : 'dir-down'} style={{fontSize: 10, padding: '2px 6px', borderRadius: 4}}>
+                          {pick.dir === 'UP' ? '▲' : '▼'}
                         </span>
                         <span>${pick.symbol}</span>
                         {pick.duplicateIndex > 1 && (
-                          <span style={{
-                            background: 'rgba(0,0,0,0.3)',
-                            padding: '2px 6px',
-                            borderRadius: 4,
-                            fontSize: 11
-                          }}>
-                            dup x{pick.duplicateIndex}
+                          <span style={{ background: 'rgba(0,0,0,0.3)', padding: '2px 6px', borderRadius: 4, fontSize: 10 }}>
+                            x{pick.duplicateIndex}
                           </span>
                         )}
-                        <span style={{
-                          color: pick.points >= 0 ? '#86efac' : '#fca5a5',
-                          fontSize: 12
-                        }}>
+                        <span className={pick.points >= 0 ? 'points good' : 'points bad'} style={{fontSize: 12, marginTop:0}}>
                           {pick.points > 0 ? '+' : ''}{pick.points}
                         </span>
                       </div>
                     ))}
                   </div>
-                  
-                  {round.boostActive && round.boostLevel > 0 && (
-                    <div style={{
-                      marginTop: 8,
-                      fontSize: 12,
-                      color: 'rgba(255,255,255,0.7)'
-                    }}>
-                      Boost: +{round.boostLevel}%
-                    </div>
-                  )}
                 </div>
               )
               })}
