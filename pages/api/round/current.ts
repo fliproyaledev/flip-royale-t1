@@ -1,78 +1,70 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { TOKENS } from '../../../lib/tokens'
-import type { DexscreenerPairRef, DexscreenerQuote } from '../../../lib/dexscreener'
-import { getDexPairQuote } from '../../../lib/dexscreener'
-import { getGeckoPoolQuote } from '../../../lib/gecko'
-import { getLatestRound } from '../../../lib/rounds'
-import { parseDexscreenerLink } from '../../../lib/tokens'
+import { kv } from '@vercel/kv'
+import { TOKENS, getTokenById } from '../../../lib/tokens'
+// import { getLatestRound } from '../../../lib/rounds' // Eğer round numarası veritabanından geliyorsa bu kalmalı, yoksa aşağıda mock var.
 
-function deriveBaseline(currentPrice: number, changePct?: number): number {
-  if (!isFinite(changePct ?? NaN) || (changePct as number) <= -100 || (changePct as number) === 0) {
-    return currentPrice
-  }
-  const baseline = currentPrice / (1 + (changePct as number) / 100)
-  return baseline > 0 ? baseline : currentPrice
-}
-
-function buildExplicitPair(token: any): DexscreenerPairRef | null {
-  const net = (token?.dexscreenerNetwork || '').toLowerCase()
-  const pr = (token?.dexscreenerPair || '').toLowerCase()
-  if (net && pr) return { network: net, pair: pr }
-  if (token?.dexscreenerUrl) {
-    const parsed = parseDexscreenerLink(token.dexscreenerUrl)
-    if (parsed.network && parsed.pair) {
-      return { network: parsed.network.toLowerCase(), pair: parsed.pair.toLowerCase() }
-    }
-  }
-  return null
+// Oracle'dan gelen veri tipi
+type OraclePriceData = {
+  tokenId: string
+  symbol: string
+  pLive: number
+  p0: number
+  changePct: number
+  fdv: number
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const snapshot = await getLatestRound()
-  if (!snapshot) {
-    return res.status(200).json({ roundId: null, items: [] })
+  if (req.method !== 'GET') {
+    return res.status(405).json({ ok: false, error: 'Method Not Allowed' })
   }
 
-  const p0ById = new Map(snapshot.items.map(i => [i.tokenId, i.p0]))
+  try {
+    // 1. Oracle'ın hazırladığı hazır fiyat paketini çek
+    const allPrices = await kv.get<OraclePriceData[]>('GLOBAL_PRICE_CACHE') || []
 
-  const items = []
-  for (const token of TOKENS) {
-    const p0 = p0ById.get(token.id)
-    if (!p0 || !(p0 > 0)) continue
-    const explicit = buildExplicitPair(token)
-    let price: number | null = null
-    let changePct: number | undefined
-    let source: string | undefined
-    if (explicit) {
-      const q: DexscreenerQuote | null = await getDexPairQuote(explicit.network, explicit.pair)
-      if (q) {
-        price = q.priceUsd
-        changePct = q.changePct
-        source = 'dexscreener'
-      } else {
-        const g = await getGeckoPoolQuote(explicit.network, explicit.pair, token.symbol)
-        if (g) {
-          price = g.priceUsd
-          changePct = g.changePct
-          source = 'gecko'
+    // 2. Verileri işle ve Highlight (Gainer/Loser) oluştur
+    const stats = allPrices.map(p => {
+        // Token bilgilerini eşleştir (Logo vs için)
+        const tokenInfo = getTokenById(p.tokenId);
+        return {
+            tokenId: p.tokenId,
+            symbol: p.symbol,
+            changePct: p.changePct,
+            points: Math.round(p.changePct * 100), // Basit puan hesabı
+            logo: tokenInfo?.logo
+        };
+    });
+
+    // 3. Sıralama Yap
+    // Kazananlar (En yüksekten düşüğe)
+    const topGainers = stats
+        .filter(s => s.changePct > 0)
+        .sort((a, b) => b.changePct - a.changePct)
+        .slice(0, 5);
+
+    // Kaybedenler (En düşükten yükseğe - yani en çok ekside olanlar)
+    const topLosers = stats
+        .filter(s => s.changePct < 0)
+        .sort((a, b) => a.changePct - b.changePct) // -20, -10'dan küçüktür, o yüzden artan sıralama
+        .slice(0, 5);
+
+    // 4. Round Bilgisi (Veritabanından veya basit hesapla)
+    // Eğer `lib/rounds` dosyanızda özel bir logic varsa onu kullanın, yoksa şimdilik kullanıcı bazlı ilerliyoruz.
+    // Burayı basitçe 200 OK dönecek ve Highlights verisini verecek şekilde ayarladım.
+    
+    return res.status(200).json({
+      ok: true,
+      round: {
+        roundNumber: 0, // Frontend bunu zaten kullanıcı verisinden alıyor, burası global sayaç
+        highlights: {
+            topGainers,
+            topLosers
         }
       }
-    }
-    if (price == null) continue
-    const pct = ((price - p0) / p0) * 100
-    items.push({
-      tokenId: token.id,
-      p0,
-      pLive: price,
-      pClose: price,
-      changePct: pct,
-      source,
-      network: explicit?.network,
-      pair: explicit?.pair
     })
+
+  } catch (err: any) {
+    console.error('Current Round API Error:', err)
+    return res.status(500).json({ ok: false, error: 'Internal Server Error' })
   }
-
-  return res.status(200).json({ roundId: snapshot.id, items })
 }
-
-
