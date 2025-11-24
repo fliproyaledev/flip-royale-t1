@@ -21,6 +21,7 @@ type DayResult = {
   userName?: string // User name
   walletAddress?: string // Wallet address
   items:{ tokenId:string; symbol:string; dir:'UP'|'DOWN'; duplicateIndex:number; points:number }[]
+  roundNumber?: number; // Backend'deki RoundHistoryEntry ile uyum için
 }
 
 // TOKENS imported from ../lib/tokens
