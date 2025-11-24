@@ -1266,8 +1266,9 @@ useEffect(() => {
   }, [highlightLosers])
   // Recent Rounds - Fresh start, no previous rounds
   const recentRounds = useMemo(() => {
-    return [] // Empty for fresh start
-  }, [])
+ if (!history || !Array.isArray(history)) return [];
+  return history; // Zaten history state'i loadUserData ile doluyor
+}, [history])
   
 const activeRoundDisplay = currentRound
   const nextRoundDisplay = currentRound + 1
