@@ -1017,61 +1017,71 @@ select option {
   .picks { grid-template-columns: 1fr !important; }
   .modal-grid { grid-template-columns: repeat(2, 1fr); }
 }
-/* =========================================
-   LIGHT MODE ZORUNLU DÜZELTMELER (Dosyanın EN ALTINA ekle)
-   ========================================= */
+/* =================================================================
+   LIGHT MODE ZORUNLU DÜZELTMESİ (DOSYANIN EN ALTINA YAPIŞTIR)
+   ================================================================= */
 
+/* 1. Ana Gövde Rengi */
 [data-theme="light"] body {
-  background-image: url('/lightmode.png');
-  color: var(--text-inv) !important;
+  color: #0f172a !important; /* Koyu Lacivert */
 }
 
-/* Light Mode'da tüm başlık ve yazıları koyu renk yapmaya zorla */
-[data-theme="light"] h1,
-[data-theme="light"] h2,
-[data-theme="light"] h3,
-[data-theme="light"] h4,
-[data-theme="light"] h5,
-[data-theme="light"] h6,
+/* 2. Panellerin İçindeki Tüm Yazıları Koyulaştır */
+[data-theme="light"] .panel,
+[data-theme="light"] .modal,
+[data-theme="light"] .pick-card,
+[data-theme="light"] .inv-card {
+  background: #ffffff !important; /* Arka plan kesin beyaz */
+  border: 1px solid #cbd5e1 !important; /* Çerçeve belirgin gri */
+  color: #0f172a !important; /* Yazılar koyu */
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* 3. Başlıklar ve Paragraflar (Görünmez olanlar) */
+[data-theme="light"] h1, 
+[data-theme="light"] h2, 
+[data-theme="light"] h3, 
+[data-theme="light"] h4, 
+[data-theme="light"] h5, 
 [data-theme="light"] p,
 [data-theme="light"] span,
 [data-theme="light"] div,
 [data-theme="light"] strong,
-[data-theme="light"] b {
-  color: var(--text-inv);
+[data-theme="light"] label {
+  /* Eğer özel bir renk sınıfı yoksa, rengi koyu yap */
+  color: inherit; 
 }
 
-/* Ama özel renkli (yeşil/kırmızı) classları bozma, onları geri yükle */
-[data-theme="light"] .points.good { color: #16a34a !important; }
-[data-theme="light"] .points.bad { color: #dc2626 !important; }
-[data-theme="light"] .badge { color: #047857 !important; }
-[data-theme="light"] .rank-1 { color: #d97706 !important; }
-[data-theme="light"] .rank-2 { color: #64748b !important; }
-[data-theme="light"] .rank-3 { color: #b45309 !important; }
+/* 4. Profile Sayfası İstatistik Düzeltmesi */
+/* Profil sayfasındaki label'lar genellikle opacity: 0.7 ile beyazdır, onları düzeltiyoruz */
+[data-theme="light"] .panel div {
+    color: #0f172a;
+}
+[data-theme="light"] .panel .muted {
+    color: #64748b !important; /* Gri metinler */
+    opacity: 1 !important;
+}
 
-/* Butonların içindeki yazıların rengini koru (Örn: Beyaz üzerine koyu yazı) */
-[data-theme="light"] .btn {
-  background: #ffffff;
-  color: #022c22 !important;
-  border-color: rgba(6, 78, 59, 0.2);
+/* 5. İSTİSNALAR (Bozulmaması Gereken Renkli Alanlar) */
+/* Yeşil/Kırmızı Puanlar, Butonlar ve Rozetler etkilenmemeli */
+[data-theme="light"] .btn.primary,
+[data-theme="light"] .badge,
+[data-theme="light"] .points.good,
+[data-theme="light"] .points.bad,
+[data-theme="light"] .dir-up,
+[data-theme="light"] .dir-down {
+    color: revert !important; /* Kendi orijinal rengine dön */
 }
-[data-theme="light"] .btn:hover {
-  background: #f1f5f9;
-}
+
+/* Primary Button Yazısı Beyaz Kalmalı */
 [data-theme="light"] .btn.primary {
-  color: #ffffff !important; /* Primary buton yazısı beyaz kalsın */
+    color: #ffffff !important;
 }
 
-/* Kartların içindeki beyaz borderları temizle */
-[data-theme="light"] .pick-card,
-[data-theme="light"] .inv-card,
-[data-theme="light"] .modal {
-  border-color: rgba(6, 78, 59, 0.1) !important;
-  background: #ffffff !important;
-}
-
-/* Profile sayfasındaki label'ları görünür yap */
-[data-theme="light"] .muted {
-  color: #064e3b !important;
-  opacity: 0.8;
+/* Input ve Select Kutuları */
+[data-theme="light"] input, 
+[data-theme="light"] select {
+    background: #f1f5f9 !important;
+    color: #0f172a !important;
+    border: 1px solid #cbd5e1 !important;
 }
