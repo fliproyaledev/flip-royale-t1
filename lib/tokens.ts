@@ -1,3 +1,6 @@
+// lib/tokens.ts
+
+// 👇 DÜZELTİLEN SATIR: Aynı klasörde olduğu için './' kullanıyoruz
 import tokenListRaw from './token-list.json'
 
 export type Token = {
@@ -6,8 +9,6 @@ export type Token = {
   name: string
   logo: string
   about: string
-
-  // Dexscreener için ayrılmış alanlar
   dexscreenerUrl?: string
   dexscreenerNetwork?: string
   dexscreenerPair?: string
@@ -18,93 +19,39 @@ export type DexscreenerLink = {
   pair?: string
 }
 
-/**
- * Dexscreener linklerini analiz eder:
- * Örnek:
- * https://dexscreener.com/base/0xEXAMPLEPAIR
- */
-function parseDexscreenerLink(input?: string): DexscreenerLink {
+// Yardımcı: Adres Temizleyici
+function cleanAddress(input?: string): string | undefined {
+  if (!input) return undefined;
+  const match = input.match(/0x[a-fA-F0-9]{40}/);
+  return match ? match[0].toLowerCase() : undefined;
+}
+
+export function parseDexscreenerLink(input?: string): DexscreenerLink {
   if (!input) return {}
-
   try {
-    const trimmed = input.trim()
-    if (!trimmed) return {}
-
-    const url = new URL(trimmed)
-    if (!url.hostname.includes('dexscreener')) return {}
-
-    const segments = url.pathname.split('/').filter(Boolean)
-    let network: string | undefined
-    let pair: string | undefined
-
-    const clean = (v?: string) => (v === 'pools' ? undefined : v)
-
-    // en gelişmiş pattern (latest/dex/pairs/network/pair)
-    if (segments.length >= 5 && segments[0] === 'latest' && segments[1] === 'dex' && segments[2] === 'pairs') {
-      network = clean(segments[3])
-
-      // Dexscreener API linklerinde "pools/:pair" yapısını da destekle
-      if (segments[4] === 'pools') {
-        pair = clean(segments[5])
-      } else {
-        pair = clean(segments[4])
+    const url = new URL(input)
+    const parts = url.pathname.split('/')
+    if (parts.length >= 3) {
+      return { 
+        network: parts[1].toLowerCase(), 
+        pair: cleanAddress(parts[2]) 
       }
     }
-    // klasik pattern (pairs/network/pair)
-    else if (segments.length >= 3 && segments[0] === 'pairs') {
-      network = clean(segments[1])
-      pair = clean(segments[2])
-    }
-    // basit pattern (network/pair)
-    else if (segments.length >= 2) {
-      network = clean(segments[0])
-      pair = clean(segments[1])
-    }
+  } catch {}
+  return {}
+}
 
-    // Eğer hala bulunamadıysa son segmenti pair olarak dene (örn: pools/:pair patterni)
-    if (!pair && segments.length >= 1) {
-      pair = clean(segments[segments.length - 1])
-    }
-
-    if (!pair) pair = url.searchParams.get('pairAddress') || undefined
-    if (!network) network = url.searchParams.get('chainId') || undefined
-
-    return {
-      network: network?.toLowerCase(),
-      pair: pair?.toLowerCase(),
-    }
-  } catch {
-    return {}
+export function buildDexscreenerViewUrl(url?: string, net?: string, pair?: string): string {
+  if (url && url.includes('dexscreener.com')) return url
+  if (net && pair) {
+    const cleanPair = cleanAddress(pair);
+    if(cleanPair) return `https://dexscreener.com/${net}/${cleanPair}`
   }
-}
-
-/** Dexscreener API URL üretir */
-export function buildDexscreenerApiUrl(
-  input?: string,
-  network?: string | null,
-  pair?: string | null
-): string | undefined {
-  const info = network && pair ? { network, pair } : parseDexscreenerLink(input)
-  if (!info.network || !info.pair) return undefined
-
-  return `https://api.dexscreener.com/latest/dex/pairs/${info.network}/${info.pair}`
-}
-
-/** Dexscreener görüntüleme URL üretir */
-export function buildDexscreenerViewUrl(
-  input?: string,
-  network?: string | null,
-  pair?: string | null
-): string | undefined {
-  const info = network && pair ? { network, pair } : parseDexscreenerLink(input)
-  if (!info.network || !info.pair) return undefined
-
-  return `https://dexscreener.com/${info.network}/${info.pair}`
+  return ''
 }
 
 type RawRow = { [key: string]: any }
 
-/** Token ID güvenli hale getirilir */
 function sanitizeId(input: string): string {
   const base = (input || '').toLowerCase().replace(/^\$+/, '')
   const clean = base.replace(/[^a-z0-9]+/g, '')
@@ -117,7 +64,6 @@ function imageToId(imageName?: string): string {
   return sanitizeId(base.replace(/\.[a-z0-9]+$/i, ''))
 }
 
-/** Satırdan token oluşturma */
 function rowToToken(row: RawRow): Token {
   const name = String(row['CARD NAME / TOKEN NAME'] || row['name'] || '').trim()
   const symbol = String(row['TICKER'] || row['symbol'] || '')
@@ -126,45 +72,33 @@ function rowToToken(row: RawRow): Token {
     .toUpperCase()
 
   const logoFile = String(row['IMAGE NAME'] || row['image'] || '').trim()
+  
+  // Link temizliği
+  const rawLink = String(row['GECKO TERMINAL POOL LINK'] || row['dexscreenerPair'] || '').trim()
+  const cleanPair = cleanAddress(rawLink)
+  const network = 'base'
 
-  const pool = String(
-    row['DEXSCREENER LINK'] ||
-    row['GECKO TERMINAL POOL LINK'] ||
-    row['dexscreenerUrl'] ||
-    ''
-  ).trim()
-
-  const parsed = parseDexscreenerLink(pool)
-  const type = String(row['TYPE'] || '').trim()
-
-  // ID üretimi
-  const derivedId =
-    sanitizeId(symbol) ||
-    imageToId(logoFile) ||
-    sanitizeId(name)
-
-  const viewUrl = buildDexscreenerViewUrl(pool)
+  const derivedId = sanitizeId(symbol) || imageToId(logoFile) || sanitizeId(name)
+  const viewUrl = cleanPair ? `https://dexscreener.com/${network}/${cleanPair}` : ''
 
   return {
     id: derivedId,
     symbol: symbol || derivedId.toUpperCase(),
     name: name || symbol || derivedId,
     logo: logoFile ? `/token-logos/${logoFile}` : '/token-logos/placeholder.png',
-    about: type || '',
-    dexscreenerUrl: viewUrl || pool || undefined,
-    dexscreenerNetwork: parsed.network,
-    dexscreenerPair: parsed.pair,
+    about: String(row['TYPE'] || '').trim(),
+    dexscreenerUrl: viewUrl,
+    dexscreenerNetwork: network,
+    dexscreenerPair: cleanPair,
   }
 }
 
-/** token-list.json içeriğini çekiyoruz */
 const jsonRows: RawRow[] = Array.isArray((tokenListRaw as any)?.Sayfa1)
   ? (tokenListRaw as any).Sayfa1
   : []
 
 export const jsonTokens: Token[] = jsonRows.map(rowToToken)
 
-/** Eski sistem ile uyum için tek seed token */
 const seedTokens: Token[] = [
   {
     id: 'virtual',
@@ -175,7 +109,6 @@ const seedTokens: Token[] = [
   },
 ]
 
-/** Duplicate engelleme */
 const existingIds = new Set(jsonTokens.map(t => t.id))
 
 export const TOKENS: Token[] = [
@@ -183,27 +116,16 @@ export const TOKENS: Token[] = [
   ...seedTokens.filter(t => !existingIds.has(t.id)),
 ]
 
-/** Token Map */
 export const TOKEN_MAP: Record<string, Token> = Object.fromEntries(
   TOKENS.map(t => [t.id, t])
 )
 
-/** Eski ID aliasları */
 export const TOKEN_ALIASES: Record<string, string> = {
   fancy: 'facy',
 }
 
-/** ID → token */
 export function getTokenById(id: string): Token | undefined {
   if (!id) return undefined
   const key = id.toLowerCase()
   return TOKEN_MAP[key] || TOKEN_MAP[TOKEN_ALIASES[key]]
 }
-
-/** FDV filtresi – token saklama */
-export function isTokenVisibleByFDV(tokenId: string, fdv?: number | null): boolean {
-  if (fdv == null || fdv === 0) return true
-  return fdv >= 10_000_000
-}
-
-export { parseDexscreenerLink }
