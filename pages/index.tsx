@@ -801,19 +801,27 @@ useEffect(() => {
   }
 
 
-  async function snapshotGlobalHighlights() {
-    // Fetch prices for all tokens to populate Global Movers
-    const allTokenIds = TOKENS.map(t => t.id)
+async function snapshotGlobalHighlights() {
     try {
-      const results = await Promise.all(allTokenIds.map(async (id) => {
-        try {
-          const data = await getPrice(id)
-          return [id, data] as const
-        } catch {
-          return null
+      // API'den hem Highlightları hem de Global Tur Numarasını çek
+      const r = await fetch(`/api/round/current`) 
+      const j = await r.json()
+      
+      if (j.ok && j.round) {
+        // 1. Ekranda yazan tur numarasını sunucuyla eşitle
+        if (j.round.roundNumber) {
+            setCurrentRound(j.round.roundNumber)
         }
-      }))
-
+        
+        // 2. Global Movers verisini güncelle
+        if (j.round.highlights) {
+          setGlobalHighlights(j.round.highlights)
+        }
+      }
+    } catch (err) {
+       console.error("Global sync failed", err)
+    }
+  }
       const entries = results
         .filter((entry) => !!entry)
         .map(([id, data]) => {
