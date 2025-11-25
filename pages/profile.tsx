@@ -4,11 +4,11 @@ import ThemeToggle from '../components/ThemeToggle'
 
 const DEFAULT_AVATAR = '/avatars/default-avatar.png'
 
-// User tipi güncellendi (name alanı eklendi)
+// User tipi güncellendi
 type User = {
   id: string
-  username: string
-  name?: string // <-- Eklendi
+  username?: string // Opsiyonel yaptık
+  name?: string    // Opsiyonel yaptık
   walletAddress?: string
   createdAt: string | number
   lastLogin: string | number
@@ -37,7 +37,6 @@ export default function Profile(){
   const [history, setHistory] = useState<RoundHistory[]>([])
   const [mounted, setMounted] = useState(false)
   const [loading, setLoading] = useState(true)
-  // Avatar yükleme durumu için state
   const [isUploading, setIsUploading] = useState(false)
 
   useEffect(() => {
@@ -60,11 +59,12 @@ export default function Profile(){
             if (j.ok && j.user) {
                 setUser(j.user)
                 
+                // History Dönüştürme
                 if (Array.isArray(j.user.roundHistory)) {
                     const mappedHistory = j.user.roundHistory.map((h: any) => ({
                         dayKey: h.date,
                         totalPoints: h.totalPoints,
-                        items: h.items || []
+                        items: h.items || [] 
                     }))
                     setHistory(mappedHistory)
                 }
@@ -76,27 +76,23 @@ export default function Profile(){
     load()
   }, [])
 
-  // --- FOTOĞRAF DEĞİŞTİRME FONKSİYONU ---
   const handleAvatarChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file || !user) return
 
-    // Basit boyut kontrolü (Örn: 2MB)
-    if (file.size > 1 * 512 * 512) {
-        alert("File is too large. Please choose an image under 512kb.")
+    if (file.size > 1 * 1024 * 1024) { 
+        alert("File is too large. Please choose an image under 1MB.")
         return
     }
 
     setIsUploading(true)
 
-    // Dosyayı Base64 string'e çevir
     const reader = new FileReader()
     reader.readAsDataURL(file)
     reader.onloadend = async () => {
         const base64data = reader.result as string
 
         try {
-            // API'ye gönder
             const res = await fetch('/api/users/update-avatar', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -105,9 +101,7 @@ export default function Profile(){
             
             const data = await res.json()
             if (data.ok) {
-                // Başarılı olursa yerel state'i güncelle (sayfa yenilenmeden değişir)
                 setUser({ ...user, avatar: base64data })
-                // Localstorage'ı da güncellemek iyi olur
                 const saved = localStorage.getItem('flipflop-user')
                 if (saved) {
                     const parsed = JSON.parse(saved)
@@ -124,7 +118,6 @@ export default function Profile(){
         }
     }
   }
-  // --------------------------------------
 
   if (!mounted || loading) {
     return (
@@ -136,6 +129,13 @@ export default function Profile(){
 
   if (!user) return null
 
+  // --- GÜÇLENDİRİLMİŞ İSİM SEÇİMİ ---
+  // 1. user.username varsa onu kullan
+  // 2. user.name varsa onu kullan
+  // 3. Hiçbiri yoksa user.id'nin ilk 8 karakterini kullan
+  // 4. O da yoksa 'Unknown Player' de.
+  const displayName = user.username || user.name || (user.id ? user.id.substring(0,8) : 'Unknown Player')
+
   const totalPoints = user.totalPoints || 0
   const totalRounds = user.currentRound ? user.currentRound - 1 : 0
   const averagePoints = totalRounds > 0 ? Math.round(totalPoints / totalRounds) : 0
@@ -144,9 +144,6 @@ export default function Profile(){
     ? Object.values(user.inventory).reduce((sum: number, count: any) => sum + Number(count), 0)
     : 0
   const packsOpened = Math.ceil(cardsCollected / 5)
-
-  // Görüntülenecek isim: Varsa 'name', yoksa 'username', hiçbiri yoksa 'Player'
-  const displayName = user.name || user.username || 'Player'
 
   return (
     <div className="app">
@@ -240,7 +237,6 @@ export default function Profile(){
                   />
                 </div>
                 <div>
-                  {/* FOTOĞRAF DEĞİŞTİRME BUTONU */}
                   <label className={`btn primary ${isUploading ? 'disabled' : ''}`} style={{display:'inline-block', cursor: isUploading ? 'not-allowed' : 'pointer', fontSize:13, padding:'8px 16px', opacity: isUploading ? 0.7 : 1}}>
                     {isUploading ? 'Uploading...' : 'Change Photo'}
                     <input
@@ -255,7 +251,7 @@ export default function Profile(){
               </div>
               <div>
                 <div className="muted" style={{marginBottom: 4}}>Username</div>
-                {/* İSİM DÜZELTMESİ BURADA YAPILDI */}
+                {/* DÜZELTİLEN İSİM ALANI */}
                 <div style={{fontSize: 16, fontWeight: 600}}>{displayName}</div>
               </div>
               <div>
