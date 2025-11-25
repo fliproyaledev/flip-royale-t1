@@ -799,29 +799,20 @@ useEffect(() => {
     if (!showMysteryResults.open) return
     setShowMysteryResults({open:false, cards:[]})
   }
-
-
 async function snapshotGlobalHighlights() {
+    const allTokenIds = TOKENS.map(t => t.id)
     try {
-      // API'den hem Highlightları hem de Global Tur Numarasını çek
-      const r = await fetch(`/api/round/current`) 
-      const j = await r.json()
-      
-      if (j.ok && j.round) {
-        // 1. Ekranda yazan tur numarasını sunucuyla eşitle
-        if (j.round.roundNumber) {
-            setCurrentRound(j.round.roundNumber)
+      // 1. Tüm fiyatları çek
+      const results = await Promise.all(allTokenIds.map(async (id) => {
+        try {
+          const data = await getPrice(id)
+          return [id, data] as const
+        } catch {
+          return null
         }
-        
-        // 2. Global Movers verisini güncelle
-        if (j.round.highlights) {
-          setGlobalHighlights(j.round.highlights)
-        }
-      }
-    } catch (err) {
-       console.error("Global sync failed", err)
-    }
-  }
+      }))
+
+      // 2. Verileri işle (results değişkeni burada kullanılıyor)
       const entries = results
         .filter((entry) => !!entry)
         .map(([id, data]) => {
@@ -829,19 +820,24 @@ async function snapshotGlobalHighlights() {
           const baseline = data.p0
           const close = data.pClose ?? data.pLive
           if (!isFinite(baseline) || !isFinite(close) || baseline <= 0) return null
+          
           const changePct = ((close - baseline) / baseline) * 100
           const points = calcPoints(baseline, close, 'UP', 1, 0, false)
+          
           const token = getTokenById(id) || TOKENS.find(t => t.id === id)
           const symbol = token?.symbol || id.toUpperCase()
+          
           return { id, symbol, changePct, points }
         })
         .filter((entry): entry is { id: string; symbol: string; changePct: number; points: number } => !!entry)
 
+      // 3. Veri yoksa boşalt
       if (!entries.length) {
         setGlobalHighlights({ topGainers: [], topLosers: [] })
         return
       }
 
+      // 4. Sıralama ve State Güncelleme
       const gainers = entries
         .filter(entry => entry.changePct > 0)
         .sort((a, b) => b.changePct - a.changePct)
@@ -870,6 +866,7 @@ async function snapshotGlobalHighlights() {
         topGainers: gainers,
         topLosers: losers
       })
+      
     } catch (err) {
       console.error('Failed to snapshot global highlights:', err)
     }
