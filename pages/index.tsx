@@ -1073,25 +1073,40 @@ async function snapshotGlobalHighlights() {
   }
 
   async function saveNextRoundPicks() {
-    if (!user?.id) return
+    // 1. Kullanıcı Kontrolü
+    if (!user?.id) {
+        alert("Please login first.");
+        return;
+    }
+
+    // 2. Kart Seçimi Kontrolü
+    if (!Array.isArray(nextRound) || nextRound.length !== 5) {
+        alert('Invalid picks data.');
+        return;
+    }
+    const filledCount = nextRound.filter(p => p !== null).length;
+    if (filledCount === 0) {
+        alert('Please select at least one card.');
+        return;
+    }
 
     try {
-      setNextRound(currentNextRound => {
-        // Validate nextRound before saving
-        if (!Array.isArray(currentNextRound) || currentNextRound.length !== 5) {
-          alert('Invalid picks data. Please try selecting cards again.')
-          return currentNextRound
-        }
-        
-        // Check if all 5 slots are filled
-        const filledCount = currentNextRound.filter(p => p !== null).length
-        if (filledCount === 0) {
-          alert('Please select at least one card before saving.')
-          return currentNextRound
-        }
-        
-        // Prepare data
-        const dataToSave = currentNextRound.map(p => {
+      // 3. İmzalanacak Mesajı Hazırla
+      const selectedTickers = nextRound.filter(p => p).map(p => p?.tokenId).join(', ');
+      // Mesaj formatı Backend ile birebir aynı olmalı ('Flip Royale:' ile başlamalı)
+      const messageToSign = `Flip Royale: Save Picks\nDate: ${new Date().toISOString().split('T')[0]}\nItems: ${filledCount}\nCards: ${selectedTickers}`;
+      
+      console.log("✍️ İmza İsteniyor...");
+      
+      // 4. Cüzdandan İmza Al
+      const signature = await signMessageAsync({
+        message: messageToSign,
+      });
+
+      console.log("✅ İmza Alındı, Sunucuya Gönderiliyor...");
+
+      // 5. Veriyi Hazırla (Gereksiz null'ları temizlemiyoruz, sunucu yapısını koruyoruz)
+      const dataToSave = nextRound.map(p => {
           if (p === null) return null
           return {
             tokenId: p.tokenId,
@@ -1099,31 +1114,38 @@ async function snapshotGlobalHighlights() {
             duplicateIndex: p.duplicateIndex,
             locked: p.locked || false
           }
-        })
-        
-        // Call API
-        fetch('/api/round/save', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                userId: user.id,
-                nextRound: dataToSave
-            })
-        }).then(r => r.json()).then(d => {
-            if (d.ok) {
-                setNextRoundLoaded(true)
-                setNextRoundSaved(true)
-                alert(`Picks saved successfully! ${filledCount}/5 cards selected.`)
-            } else {
-                alert('Failed to save picks: ' + (d.error || 'Unknown error'))
-            }
-        })
-        
-        return currentNextRound
-      })
+      });
+
+      // 6. API İsteği (POST)
+      // DİKKAT: method: 'POST' fetch parantezinin İÇİNDE olmalı
+      const response = await fetch('/api/round/save', {
+          method: 'POST',  // <--- İŞTE BURASI ÇOK ÖNEMLİ
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: user.id.toLowerCase(), // <--- Harf hatası önlemi (User not found için)
+            nextRound: dataToSave,
+            signature: signature,
+            message: messageToSign // <--- Mesajı da gönderiyoruz
+          })
+      });
+
+      const data = await response.json();
+
+      // 7. Sonuç İşleme
+      if (response.ok && data.ok) {
+          console.log("🎉 Kayıt Başarılı!");
+          setNextRoundLoaded(true);
+          setNextRoundSaved(true);
+          alert(`Picks saved successfully!`);
+      } else {
+          console.error("Sunucu Hatası:", data);
+          alert('Failed to save: ' + (data.error || 'Unknown error'));
+      }
+
     } catch (e) {
-      console.error('❌ [SAVE] Failed to save nextRound picks:', e)
-      alert('Failed to save picks. Please try again.')
+      console.error("Save Error:", e);
+      // Kullanıcı imzayı reddederse veya ağ hatası olursa
+      // alert('Save cancelled or failed.'); 
     }
   }
 
